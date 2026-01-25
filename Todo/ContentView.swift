@@ -42,23 +42,34 @@ struct SidebarView: View {
             .foregroundStyle(.secondary)
         }
         .navigationTitle("Lists")
+        .onChange(of: isEditing) { _, focused in
+            if !focused, let id = editingID {
+                finishRename(id)
+            }
+        }
     }
 
     @ViewBuilder
     private func listRow(for list: TaskList) -> some View {
-        if editingID == list.id {
-            TextField("Name", text: $editName)
-                .focused($isEditing)
-                .onSubmit { finishRename(list.id) }
-        } else {
-            NavigationLink(value: list.id) {
-                Label(list.name, systemImage: "list.bullet")
+        HStack(spacing: 6) {
+            Image(systemName: "list.bullet")
+                .foregroundStyle(.secondary)
+                .frame(width: 20)
+
+            if editingID == list.id {
+                TextField("", text: $editName)
+                    .textFieldStyle(.plain)
+                    .focused($isEditing)
+                    .onSubmit { finishRename(list.id) }
+            } else {
+                Text(list.name)
             }
-            .contextMenu {
-                Button("Rename") { startRename(list) }
-                Divider()
-                Button("Delete", role: .destructive) { store.deleteList(list.id) }
-            }
+        }
+        .tag(list.id)
+        .contextMenu {
+            Button("Rename") { startRename(list) }
+            Divider()
+            Button("Delete", role: .destructive) { store.deleteList(list.id) }
         }
     }
 
@@ -66,7 +77,9 @@ struct SidebarView: View {
         let id = store.addList(name: "New List")
         selectedListID = id
         if let list = store.lists.first(where: { $0.id == id }) {
-            startRename(list)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                startRename(list)
+            }
         }
     }
 
@@ -77,7 +90,10 @@ struct SidebarView: View {
     }
 
     private func finishRename(_ id: UUID) {
-        store.renameList(id, to: editName)
+        let name = editName.trimmingCharacters(in: .whitespaces)
+        if !name.isEmpty {
+            store.renameList(id, to: name)
+        }
         editingID = nil
     }
 }

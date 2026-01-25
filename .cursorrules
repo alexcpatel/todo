@@ -4,5 +4,6 @@
 - Use minimal code to accomplish any goal
 - When debugging, verify and test assumptions before making major code changes
 - No README files
-- Prefer SwiftUI + SwiftData with CloudKit for iCloud sync
+- Prefer SwiftUI with iCloud Drive file sync for cross-device sync
 - Target macOS 15+ and iOS 18+ (Tahoe-era design)
+- Do not run shell commands automatically - provide commands for user to run

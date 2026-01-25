@@ -46,9 +46,6 @@ struct TaskListView: View {
         }
         .listStyle(.inset)
         .navigationTitle(list.name)
-        #if os(iOS)
-        .toolbar { EditButton() }
-        #endif
     }
 }
 
@@ -59,24 +56,22 @@ struct NewTaskRow: View {
     @FocusState private var isFocused: Bool
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
+        HStack(spacing: 12) {
             Image(systemName: "circle")
                 .font(.title2)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(.quaternary)
 
             TextField("Add a task...", text: $title)
                 .textFieldStyle(.plain)
                 .focused($isFocused)
-                .onSubmit(addTask)
+                .onSubmit {
+                    guard !title.isEmpty else { return }
+                    store.addTask(to: listID, title: title)
+                    title = ""
+                    isFocused = true
+                }
         }
         .padding(.vertical, 4)
-    }
-
-    private func addTask() {
-        guard !title.isEmpty else { return }
-        store.addTask(to: listID, title: title)
-        title = ""
-        isFocused = true
     }
 }
 
@@ -84,7 +79,10 @@ struct TaskRow: View {
     let task: TaskItem
     let listID: UUID
     @EnvironmentObject var store: Store
-    @State private var isEditing = false
+    @State private var isEditingTitle = false
+    @State private var editTitle = ""
+    @State private var showNoteEditor = false
+    @FocusState private var titleFocused: Bool
 
     private var icon: String {
         switch task.status {
@@ -105,9 +103,8 @@ struct TaskRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             Button {
-                withAnimation {
-                    let newStatus: TaskStatus = task.isDone ? .incomplete : .completed
-                    store.setTaskStatus(task.id, in: listID, status: newStatus)
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    store.setTaskStatus(task.id, in: listID, status: task.isDone ? .incomplete : .completed)
                 }
             } label: {
                 Image(systemName: icon)
@@ -115,22 +112,32 @@ struct TaskRow: View {
                     .foregroundStyle(iconColor)
             }
             .buttonStyle(.plain)
-            .padding(.top, 2)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(task.title)
-                    .strikethrough(task.isDone)
-                    .foregroundStyle(task.isDone ? .secondary : .primary)
+                if isEditingTitle {
+                    TextField("", text: $editTitle)
+                        .textFieldStyle(.plain)
+                        .focused($titleFocused)
+                        .onSubmit { saveTitle() }
+                        .onChange(of: titleFocused) { _, focused in
+                            if !focused { saveTitle() }
+                        }
+                } else {
+                    Text(task.title)
+                        .strikethrough(task.isDone)
+                        .foregroundStyle(task.isDone ? .secondary : .primary)
+                }
 
                 if !task.note.isEmpty {
                     Text(task.note)
-                        .font(.caption)
+                        .font(.callout)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
             }
-
-            Spacer()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .onTapGesture(count: 2) { startEditingTitle() }
 
             if task.isDone, let date = task.completedAt {
                 Text(date, style: .date)
@@ -139,9 +146,9 @@ struct TaskRow: View {
             }
         }
         .padding(.vertical, 4)
-        .contentShape(Rectangle())
         .contextMenu {
-            Button("Edit") { isEditing = true }
+            Button("Edit Title") { startEditingTitle() }
+            Button(task.note.isEmpty ? "Add Note" : "Edit Note") { showNoteEditor = true }
             Divider()
             if task.status != .completed {
                 Button("Complete") { store.setTaskStatus(task.id, in: listID, status: .completed) }
@@ -155,49 +162,66 @@ struct TaskRow: View {
             Divider()
             Button("Delete", role: .destructive) { store.deleteTask(task.id, from: listID) }
         }
-        .sheet(isPresented: $isEditing) {
-            TaskEditSheet(task: task, listID: listID)
+        .popover(isPresented: $showNoteEditor) {
+            NoteEditor(task: task, listID: listID)
         }
+    }
+
+    private func startEditingTitle() {
+        editTitle = task.title
+        isEditingTitle = true
+        titleFocused = true
+    }
+
+    private func saveTitle() {
+        let text = editTitle.trimmingCharacters(in: .whitespaces)
+        if !text.isEmpty, text != task.title {
+            store.updateTask(task.id, in: listID, title: text, note: task.note)
+        }
+        isEditingTitle = false
     }
 }
 
-struct TaskEditSheet: View {
+struct NoteEditor: View {
     let task: TaskItem
     let listID: UUID
     @EnvironmentObject var store: Store
     @Environment(\.dismiss) private var dismiss
-    @State private var title: String
     @State private var note: String
+    @FocusState private var focused: Bool
 
     init(task: TaskItem, listID: UUID) {
         self.task = task
         self.listID = listID
-        _title = State(initialValue: task.title)
         _note = State(initialValue: task.note)
     }
 
     var body: some View {
-        VStack(spacing: 16) {
-            Text("Edit Task").font(.headline)
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Note").font(.headline)
 
-            TextField("Title", text: $title)
-                .textFieldStyle(.roundedBorder)
-
-            TextField("Notes (optional)", text: $note, axis: .vertical)
-                .textFieldStyle(.roundedBorder)
-                .lineLimit(3...6)
+            TextEditor(text: $note)
+                .font(.body)
+                .frame(minWidth: 280, minHeight: 100)
+                .scrollContentBackground(.hidden)
+                .focused($focused)
 
             HStack {
-                Button("Cancel", role: .cancel) { dismiss() }
+                if !task.note.isEmpty {
+                    Button("Clear", role: .destructive) {
+                        store.updateTask(task.id, in: listID, title: task.title, note: "")
+                        dismiss()
+                    }
+                }
                 Spacer()
-                Button("Save") {
-                    store.updateTask(task.id, in: listID, title: title, note: note)
+                Button("Done") {
+                    store.updateTask(task.id, in: listID, title: task.title, note: note)
                     dismiss()
                 }
-                .disabled(title.isEmpty)
+                .keyboardShortcut(.return)
             }
         }
-        .padding(24)
-        .frame(minWidth: 300)
+        .padding()
+        .onAppear { focused = true }
     }
 }

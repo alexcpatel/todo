@@ -12,6 +12,10 @@ struct TodoApp: App {
                 .environmentObject(store)
         }
         .commands {
+            // Remove unwanted menu items
+            CommandGroup(replacing: .newItem) {}
+
+            // Add import/export to File menu
             CommandGroup(after: .importExport) {
                 Button("Import from TickTick...") { showingImporter = true }
                     .keyboardShortcut("i", modifiers: [.command, .shift])
