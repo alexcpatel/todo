@@ -1,0 +1,22 @@
+{
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:todo}",
+            "name": "Debug Todo",
+            "program": "${workspaceFolder:todo}/.build/debug/Todo",
+            "preLaunchTask": "swift: Build Debug Todo"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:todo}",
+            "name": "Release Todo",
+            "program": "${workspaceFolder:todo}/.build/release/Todo",
+            "preLaunchTask": "swift: Build Release Todo"
+        }
+    ]
+}

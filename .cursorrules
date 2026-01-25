@@ -1,0 +1,8 @@
+# Project Rules
+
+- Be brief and concise in all responses
+- Use minimal code to accomplish any goal
+- When debugging, verify and test assumptions before making major code changes
+- No README files
+- Prefer SwiftUI + SwiftData with CloudKit for iCloud sync
+- Target macOS 15+ and iOS 18+ (Tahoe-era design)
