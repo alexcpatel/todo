@@ -1,5 +1,9 @@
 import Foundation
 
+enum TaskStatus: String, Codable {
+    case incomplete, completed, wontDo
+}
+
 struct TaskList: Identifiable, Codable {
     var id = UUID()
     var name: String
@@ -16,23 +20,34 @@ struct TaskList: Identifiable, Codable {
 struct TaskItem: Identifiable, Codable {
     var id = UUID()
     var title: String
-    var isCompleted: Bool
+    var note: String
+    var status: TaskStatus
     var completedAt: Date?
     var order: Int
 
-    init(title: String, order: Int = 0) {
+    var isCompleted: Bool { status == .completed }
+    var isWontDo: Bool { status == .wontDo }
+    var isDone: Bool { status != .incomplete }
+
+    init(title: String, note: String = "", order: Int = 0) {
         self.title = title
-        isCompleted = false
+        self.note = note
+        self.status = .incomplete
         self.order = order
     }
 
     mutating func complete() {
-        isCompleted = true
+        status = .completed
         completedAt = Date()
     }
 
-    mutating func uncomplete() {
-        isCompleted = false
+    mutating func markWontDo() {
+        status = .wontDo
+        completedAt = Date()
+    }
+
+    mutating func reopen() {
+        status = .incomplete
         completedAt = nil
     }
 }

@@ -13,8 +13,6 @@ final class Store: ObservableObject {
         startMonitoring()
     }
 
-    // MARK: - iCloud Drive URL
-
     private var iCloudURL: URL? {
         FileManager.default.url(forUbiquityContainerIdentifier: nil)?
             .appendingPathComponent("Documents")
@@ -25,31 +23,23 @@ final class Store: ObservableObject {
             try? FileManager.default.createDirectory(at: icloud, withIntermediateDirectories: true)
             return icloud.appendingPathComponent(filename)
         }
-        // Fallback to local
         let local = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         return local.appendingPathComponent(filename)
     }
 
-    // MARK: - Persistence
-
     func load() {
         guard let url = fileURL else { return }
-
-        // Download if in iCloud
         if !FileManager.default.isUbiquitousItem(at: url)
             || FileManager.default.fileExists(atPath: url.path)
         {
-            readFile(at: url)
+            if let data = try? Data(contentsOf: url),
+               let decoded = try? JSONDecoder().decode([TaskList].self, from: data)
+            {
+                lists = decoded.sorted { $0.order < $1.order }
+            }
         } else {
             try? FileManager.default.startDownloadingUbiquitousItem(at: url)
         }
-    }
-
-    private func readFile(at url: URL) {
-        guard let data = try? Data(contentsOf: url),
-              let decoded = try? JSONDecoder().decode([TaskList].self, from: data)
-        else { return }
-        lists = decoded.sorted { $0.order < $1.order }
     }
 
     func save() {
@@ -59,17 +49,11 @@ final class Store: ObservableObject {
         try? data.write(to: url, options: .atomic)
     }
 
-    // MARK: - iCloud Monitoring
-
     private func startMonitoring() {
         guard iCloudURL != nil else { return }
-
         metadataQuery = NSMetadataQuery()
-        metadataQuery?.predicate = NSPredicate(
-            format: "%K == %@", NSMetadataItemFSNameKey, filename
-        )
+        metadataQuery?.predicate = NSPredicate(format: "%K == %@", NSMetadataItemFSNameKey, filename)
         metadataQuery?.searchScopes = [NSMetadataQueryUbiquitousDocumentsScope]
-
         NotificationCenter.default.addObserver(
             self, selector: #selector(queryDidUpdate),
             name: .NSMetadataQueryDidUpdate, object: metadataQuery
@@ -78,48 +62,60 @@ final class Store: ObservableObject {
     }
 
     @objc private func queryDidUpdate() {
-        Task { @MainActor in
-            load()
-        }
+        Task { @MainActor in load() }
     }
 
-    // MARK: - List Operations
+    // MARK: - Lists
 
-    func addList(name: String) {
-        lists.append(TaskList(name: name, order: lists.count))
+    func addList(name: String) -> UUID {
+        let list = TaskList(name: name, order: lists.count)
+        lists.append(list)
+        save()
+        return list.id
+    }
+
+    func renameList(_ id: UUID, to name: String) {
+        guard let idx = lists.firstIndex(where: { $0.id == id }) else { return }
+        lists[idx].name = name
         save()
     }
 
-    func deleteList(_ list: TaskList) {
-        lists.removeAll { $0.id == list.id }
+    func deleteList(_ id: UUID) {
+        lists.removeAll { $0.id == id }
         save()
     }
 
     func moveList(from: IndexSet, to: Int) {
         lists.move(fromOffsets: from, toOffset: to)
-        for (i, _) in lists.enumerated() {
-            lists[i].order = i
-        }
+        for i in lists.indices { lists[i].order = i }
         save()
     }
 
-    // MARK: - Task Operations
+    // MARK: - Tasks
 
-    func addTask(to listID: UUID, title: String) {
+    func addTask(to listID: UUID, title: String, note: String = "") {
         guard let idx = lists.firstIndex(where: { $0.id == listID }) else { return }
-        let task = TaskItem(title: title, order: lists[idx].items.count)
-        lists[idx].items.append(task)
+        lists[idx].items.append(TaskItem(title: title, note: note, order: lists[idx].items.count))
         save()
     }
 
-    func toggleTask(_ taskID: UUID, in listID: UUID) {
+    func updateTask(_ taskID: UUID, in listID: UUID, title: String, note: String) {
         guard let listIdx = lists.firstIndex(where: { $0.id == listID }),
               let taskIdx = lists[listIdx].items.firstIndex(where: { $0.id == taskID })
         else { return }
-        if lists[listIdx].items[taskIdx].isCompleted {
-            lists[listIdx].items[taskIdx].uncomplete()
-        } else {
-            lists[listIdx].items[taskIdx].complete()
+        lists[listIdx].items[taskIdx].title = title
+        lists[listIdx].items[taskIdx].note = note
+        save()
+    }
+
+    func setTaskStatus(_ taskID: UUID, in listID: UUID, status: TaskStatus) {
+        guard let listIdx = lists.firstIndex(where: { $0.id == listID }),
+              let taskIdx = lists[listIdx].items.firstIndex(where: { $0.id == taskID })
+        else { return }
+        switch status {
+        case .incomplete: lists[listIdx].items[taskIdx].reopen()
+        case .completed: lists[listIdx].items[taskIdx].complete()
+        case .wontDo: lists[listIdx].items[taskIdx].markWontDo()
         }
         save()
     }
@@ -132,14 +128,10 @@ final class Store: ObservableObject {
 
     func moveTasks(in listID: UUID, completed: Bool, from: IndexSet, to: Int) {
         guard let listIdx = lists.firstIndex(where: { $0.id == listID }) else { return }
-        var subset = lists[listIdx].items.filter { $0.isCompleted == completed }
+        var subset = lists[listIdx].items.filter { $0.isDone == completed }
         subset.move(fromOffsets: from, toOffset: to)
-        for (i, _) in subset.enumerated() {
-            subset[i].order = i
-        }
-
-        let other = lists[listIdx].items.filter { $0.isCompleted != completed }
-        lists[listIdx].items = subset + other
+        for i in subset.indices { subset[i].order = i }
+        lists[listIdx].items = subset + lists[listIdx].items.filter { $0.isDone != completed }
         save()
     }
 }
