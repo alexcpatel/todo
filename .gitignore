@@ -1,6 +1,9 @@
 build/
+build-mac/
+build-ios/
 .build/
 *.xcuserstate
 xcuserdata/
 DerivedData/
 .DS_Store
+build.sh

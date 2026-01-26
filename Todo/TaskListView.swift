@@ -44,11 +44,13 @@ struct TaskListView: View {
                 }
             }
         }
-        .listStyle(.inset)
-        .navigationTitle(list.name)
         #if os(iOS)
+        .listStyle(.insetGrouped)
         .toolbar { EditButton() }
+        #else
+        .listStyle(.inset)
         #endif
+        .navigationTitle(list.name)
     }
 }
 
@@ -177,9 +179,17 @@ struct TaskRow: View {
             .tint(.green)
         }
         #endif
+        #if os(iOS)
+        .sheet(isPresented: $showNoteEditor) {
+            NoteEditor(task: task, listID: listID)
+                .presentationDetents([.medium])
+                .presentationDragIndicator(.visible)
+        }
+        #else
         .popover(isPresented: $showNoteEditor) {
             NoteEditor(task: task, listID: listID)
         }
+        #endif
     }
 
     private func startEditing() {
@@ -212,15 +222,33 @@ struct NoteEditor: View {
     }
 
     var body: some View {
+        #if os(iOS)
+        NavigationStack {
+            noteEditorContent
+                .navigationTitle("Note")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        if !task.note.isEmpty {
+                            Button("Clear", role: .destructive) {
+                                store.updateTask(task.id, in: listID, title: task.title, note: "")
+                                dismiss()
+                            }
+                        }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") {
+                            store.updateTask(task.id, in: listID, title: task.title, note: note)
+                            dismiss()
+                        }
+                        .fontWeight(.semibold)
+                    }
+                }
+        }
+        #else
         VStack(alignment: .leading, spacing: 12) {
             Text("Note").font(.headline)
-
-            TextEditor(text: $note)
-                .font(.body)
-                .frame(minWidth: 280, minHeight: 100)
-                .scrollContentBackground(.hidden)
-                .focused($focused)
-
+            noteEditorContent
             HStack {
                 if !task.note.isEmpty {
                     Button("Clear", role: .destructive) {
@@ -237,6 +265,15 @@ struct NoteEditor: View {
             }
         }
         .padding()
-        .onAppear { focused = true }
+        #endif
+    }
+
+    private var noteEditorContent: some View {
+        TextEditor(text: $note)
+            .font(.body)
+            .frame(minWidth: 280, minHeight: 100)
+            .scrollContentBackground(.hidden)
+            .focused($focused)
+            .onAppear { focused = true }
     }
 }

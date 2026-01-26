@@ -7,15 +7,14 @@ struct TodoApp: App {
     @State private var showingExporter = false
 
     var body: some Scene {
+        #if os(macOS)
         Window("Todo", id: "main") {
             ContentView(showingImporter: $showingImporter, showingExporter: $showingExporter)
                 .environmentObject(store)
         }
         .commands {
             CommandGroup(replacing: .newItem) {}
-            #if os(macOS)
             CommandGroup(replacing: .saveItem) {}
-            #endif
 
             CommandGroup(after: .importExport) {
                 Button("Import from TickTick...") { showingImporter = true }
@@ -24,9 +23,13 @@ struct TodoApp: App {
                     .keyboardShortcut("e", modifiers: [.command, .shift])
             }
         }
-        #if os(macOS)
         Settings {
             SettingsView()
+                .environmentObject(store)
+        }
+        #else
+        WindowGroup {
+            ContentView(showingImporter: $showingImporter, showingExporter: $showingExporter)
                 .environmentObject(store)
         }
         #endif
