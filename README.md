@@ -10,9 +10,9 @@ A native macOS/iOS todo app with iCloud sync.
 - Check/uncheck tasks with completion dates
 - Reorder tasks and lists
 - Trash with restore capability
-- Automatic backups (every 5 min, keeps last 20)
+- Automatic backups (hourly, keeps last 30)
 - iCloud Drive sync between devices
-- Import/Export from TickTick (macOS)
+- Import from TickTick (macOS)
 
 ## How It Works
 
@@ -48,7 +48,9 @@ The sync follows **eventual consistency** with **last-writer-wins (LWW)** confli
 
 ### Backup Strategy
 
-Automatic timestamped backups are created every 5 minutes (on save), stored in `Backups/` within the same iCloud container. Old backups are pruned to keep the last 20. Restore available in Settings.
+Automatic timestamped backups are created hourly, stored in `Backups/` within the same iCloud container. Old backups are pruned to keep the last 30 (~30 days of coverage). 
+
+**Restore:** File → Restore from Backup → select a date/time
 
 ## Requirements
 

@@ -10,7 +10,8 @@ final class Store: ObservableObject {
     @Published var backups: [BackupInfo] = []
 
     private let filename = "todo-data.json"
-    private let maxBackups = 20
+    private let maxBackups = 30
+    private let backupInterval: TimeInterval = 3600 // 1 hour
     private var metadataQuery: NSMetadataQuery?
     private var coordinatorQueue = DispatchQueue(label: "com.todo.filecoordinator")
     private var lastBackupDate: Date?
@@ -128,9 +129,9 @@ final class Store: ObservableObject {
             }
         }
 
-        // Create backup every 5 minutes at most
+        // Create backup hourly
         let now = Date()
-        if lastBackupDate == nil || now.timeIntervalSince(lastBackupDate!) > 300 {
+        if lastBackupDate == nil || now.timeIntervalSince(lastBackupDate!) > backupInterval {
             createBackup(data: data)
             lastBackupDate = now
         }

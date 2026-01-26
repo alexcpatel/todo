@@ -8,7 +8,6 @@ enum SidebarSelection: Hashable {
 struct ContentView: View {
     @EnvironmentObject var store: Store
     @Binding var showingImporter: Bool
-    @Binding var showingExporter: Bool
 
     var body: some View {
         #if os(iOS)
@@ -18,7 +17,6 @@ struct ContentView: View {
         #else
         MacContentView()
             .sheet(isPresented: $showingImporter) { ImportView() }
-            .sheet(isPresented: $showingExporter) { ExportView() }
         #endif
     }
 }

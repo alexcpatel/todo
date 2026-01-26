@@ -28,7 +28,7 @@ struct SettingsView: View {
             }
 
             Section("Backups") {
-                Text("Automatic backups are created every 5 minutes. Last \(store.backups.count) backups kept.")
+                Text("Automatic backups created hourly. Last 30 backups kept.")
                     .foregroundStyle(.secondary)
                     .font(.caption)
 
