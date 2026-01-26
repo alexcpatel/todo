@@ -13,10 +13,8 @@ struct ContentView: View {
     var body: some View {
         #if os(iOS)
         NavigationStack {
-            SidebarListView(showingImporter: $showingImporter, showingExporter: $showingExporter)
+            SidebarListView()
         }
-        .sheet(isPresented: $showingImporter) { ImportView().presentationDetents([.large]) }
-        .sheet(isPresented: $showingExporter) { ExportView().presentationDetents([.large]) }
         #else
         MacContentView()
             .sheet(isPresented: $showingImporter) { ImportView() }
@@ -28,58 +26,71 @@ struct ContentView: View {
 #if os(iOS)
 struct SidebarListView: View {
     @EnvironmentObject var store: Store
-    @Binding var showingImporter: Bool
-    @Binding var showingExporter: Bool
     @State private var editingID: UUID?
     @State private var editName = ""
+    @State private var scrollTarget: UUID?
     @FocusState private var isEditing: Bool
 
     var body: some View {
-        List {
-            Section {
-                ForEach(store.activeLists) { list in
-                    NavigationLink(value: SidebarSelection.list(list.id)) {
-                        listRowContent(for: list)
-                    }
-                    .contextMenu {
-                        Button("Rename") { startRename(list) }
-                        Divider()
-                        Button("Delete", role: .destructive) { store.deleteList(list.id) }
-                    }
-                    .swipeActions(edge: .trailing) {
-                        Button(role: .destructive) { store.deleteList(list.id) } label: {
-                            Label("Delete", systemImage: "trash")
+        ScrollViewReader { proxy in
+            List {
+                Section {
+                    ForEach(store.activeLists) { list in
+                        NavigationLink(value: SidebarSelection.list(list.id)) {
+                            listRowContent(for: list)
+                        }
+                        .id(list.id)
+                        .contextMenu {
+                            Button("Rename") { startRename(list) }
+                            Divider()
+                            Button("Delete", role: .destructive) { store.deleteList(list.id) }
+                        }
+                        .swipeActions(edge: .trailing) {
+                            Button(role: .destructive) { store.deleteList(list.id) } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
                         }
                     }
-                }
-                .onMove { store.moveList(from: $0, to: $1) }
+                    .onMove { store.moveList(from: $0, to: $1) }
 
-                Button { addNewList() } label: {
-                    Label("New List", systemImage: "plus")
+                    Button { addNewList() } label: {
+                        Label("New List", systemImage: "plus")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-            }
 
-            Section {
-                NavigationLink(value: SidebarSelection.trash) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "trash")
-                            .foregroundStyle(.secondary)
-                            .frame(width: 20)
-                        Text("Trash")
-                        Spacer()
-                        if store.trashCount > 0 {
-                            Text("\(store.trashCount)")
-                                .font(.caption)
+                Section {
+                    NavigationLink(value: SidebarSelection.trash) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "trash")
                                 .foregroundStyle(.secondary)
+                                .frame(width: 20)
+                            Text("Trash")
+                            Spacer()
+                            if store.trashCount > 0 {
+                                Text("\(store.trashCount)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
+                }
+            }
+            .onChange(of: scrollTarget) { _, target in
+                if let target {
+                    withAnimation {
+                        proxy.scrollTo(target, anchor: .center)
+                    }
+                    scrollTarget = nil
                 }
             }
         }
-        .listStyle(.insetGrouped)
+        .listStyle(.plain)
+        .listSectionSpacing(.compact)
+        .contentMargins(.top, 0, for: .scrollContent)
         .navigationTitle("Lists")
+        .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(for: SidebarSelection.self) { selection in
             switch selection {
             case .list(let id):
@@ -90,19 +101,16 @@ struct SidebarListView: View {
                 TrashView()
             }
         }
+        .scrollDismissesKeyboard(.interactively)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button { addNewList() } label: {
                     Image(systemName: "plus")
                 }
             }
-            ToolbarItem(placement: .topBarLeading) {
-                Menu {
-                    Button("Import from TickTick...") { showingImporter = true }
-                    Button("Export to TickTick...") { showingExporter = true }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                }
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { isEditing = false }
             }
         }
         .onChange(of: isEditing) { _, focused in
@@ -123,6 +131,7 @@ struct SidebarListView: View {
                 TextField("", text: $editName)
                     .textFieldStyle(.plain)
                     .focused($isEditing)
+                    .submitLabel(.done)
                     .onSubmit { finishRename(list.id) }
             } else {
                 Text(list.name)
@@ -133,8 +142,9 @@ struct SidebarListView: View {
 
     private func addNewList() {
         let id = store.addList(name: "New List")
+        scrollTarget = id
         if let list = store.lists.first(where: { $0.id == id }) {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                 startRename(list)
             }
         }

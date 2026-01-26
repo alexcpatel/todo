@@ -179,10 +179,13 @@ final class Store: ObservableObject {
 
     // MARK: - Tasks
 
-    func addTask(to listID: UUID, title: String, note: String = "") {
-        guard let idx = lists.firstIndex(where: { $0.id == listID }) else { return }
-        lists[idx].items.append(TaskItem(title: title, note: note, order: lists[idx].items.count))
+    @discardableResult
+    func addTask(to listID: UUID, title: String, note: String = "") -> UUID? {
+        guard let idx = lists.firstIndex(where: { $0.id == listID }) else { return nil }
+        let task = TaskItem(title: title, note: note, order: lists[idx].items.count)
+        lists[idx].items.append(task)
         save()
+        return task.id
     }
 
     func updateTask(_ taskID: UUID, in listID: UUID, title: String, note: String) {

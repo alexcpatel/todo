@@ -3,6 +3,7 @@ import SwiftUI
 struct TaskListView: View {
     let list: TaskList
     @EnvironmentObject var store: Store
+    @State private var scrollTarget: UUID?
 
     private var incompleteTasks: [TaskItem] {
         list.items.filter { !$0.isDone }.sorted { $0.order < $1.order }
@@ -15,47 +16,69 @@ struct TaskListView: View {
     }
 
     var body: some View {
-        List {
-            Section {
-                ForEach(incompleteTasks) { task in
-                    TaskRow(task: task, listID: list.id)
-                }
-                .onMove { store.moveTasks(in: list.id, completed: false, from: $0, to: $1) }
-                .onDelete { indices in
-                    for i in indices { store.deleteTask(incompleteTasks[i].id, from: list.id) }
-                }
-
-                NewTaskRow(listID: list.id)
-            } header: {
-                Text("Tasks").font(.subheadline.weight(.medium))
-            }
-
-            if !doneTasks.isEmpty {
+        ScrollViewReader { proxy in
+            List {
                 Section {
-                    ForEach(doneTasks) { task in
+                    ForEach(incompleteTasks) { task in
                         TaskRow(task: task, listID: list.id)
+                            .id(task.id)
                     }
-                    .onMove { store.moveTasks(in: list.id, completed: true, from: $0, to: $1) }
+                    .onMove { store.moveTasks(in: list.id, completed: false, from: $0, to: $1) }
                     .onDelete { indices in
-                        for i in indices { store.deleteTask(doneTasks[i].id, from: list.id) }
+                        for i in indices { store.deleteTask(incompleteTasks[i].id, from: list.id) }
                     }
+
+                    NewTaskRow(listID: list.id, onAdd: { id in
+                        scrollTarget = id
+                    })
+                    .id("newTask")
                 } header: {
-                    Text("Done").font(.subheadline.weight(.medium))
+                    Text("Tasks").font(.subheadline.weight(.medium))
+                }
+
+                if !doneTasks.isEmpty {
+                    Section {
+                        ForEach(doneTasks) { task in
+                            TaskRow(task: task, listID: list.id)
+                                .id(task.id)
+                        }
+                        .onMove { store.moveTasks(in: list.id, completed: true, from: $0, to: $1) }
+                        .onDelete { indices in
+                            for i in indices { store.deleteTask(doneTasks[i].id, from: list.id) }
+                        }
+                    } header: {
+                        Text("Done").font(.subheadline.weight(.medium))
+                    }
+                }
+            }
+            .onChange(of: scrollTarget) { _, target in
+                if let target {
+                    withAnimation {
+                        proxy.scrollTo(target, anchor: .center)
+                    }
+                    scrollTarget = nil
                 }
             }
         }
         #if os(iOS)
-        .listStyle(.insetGrouped)
+        .listStyle(.plain)
+        .listSectionSpacing(.compact)
+        .contentMargins(.top, 0, for: .scrollContent)
         .toolbar { EditButton() }
+        .scrollDismissesKeyboard(.interactively)
+        .navigationBarTitleDisplayMode(.inline)
         #else
         .listStyle(.inset)
         #endif
         .navigationTitle(list.name)
+        .animation(.smooth(duration: 0.35), value: incompleteTasks.map(\.id))
+        .animation(.smooth(duration: 0.35), value: doneTasks.map(\.id))
     }
 }
 
 struct NewTaskRow: View {
     let listID: UUID
+    var onAdd: ((UUID) -> Void)? = nil
     @EnvironmentObject var store: Store
     @State private var title = ""
     @FocusState private var isFocused: Bool
@@ -69,14 +92,24 @@ struct NewTaskRow: View {
             TextField("Add a task...", text: $title)
                 .textFieldStyle(.plain)
                 .focused($isFocused)
+                .submitLabel(.done)
                 .onSubmit {
                     guard !title.isEmpty else { return }
-                    store.addTask(to: listID, title: title)
+                    let id = store.addTask(to: listID, title: title)
                     title = ""
                     isFocused = true
+                    if let id { onAdd?(id) }
                 }
         }
         .padding(.vertical, 4)
+        #if os(iOS)
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { isFocused = false }
+            }
+        }
+        #endif
     }
 }
 
@@ -108,15 +141,17 @@ struct TaskRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             Button {
-                withAnimation(.easeInOut(duration: 0.15)) {
+                withAnimation(.smooth(duration: 0.3)) {
                     store.setTaskStatus(task.id, in: listID, status: task.isDone ? .incomplete : .completed)
                 }
             } label: {
                 Image(systemName: icon)
                     .font(.title2)
                     .foregroundStyle(iconColor)
+                    .symbolEffect(.bounce, value: task.status)
             }
             .buttonStyle(.plain)
+            .sensoryFeedback(.impact(weight: .light), trigger: task.status)
 
             VStack(alignment: .leading, spacing: 2) {
                 if isEditing {
