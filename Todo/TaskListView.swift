@@ -46,6 +46,9 @@ struct TaskListView: View {
         }
         .listStyle(.inset)
         .navigationTitle(list.name)
+        #if os(iOS)
+        .toolbar { EditButton() }
+        #endif
     }
 }
 
@@ -79,10 +82,10 @@ struct TaskRow: View {
     let task: TaskItem
     let listID: UUID
     @EnvironmentObject var store: Store
-    @State private var isEditingTitle = false
-    @State private var editTitle = ""
+    @State private var editedTitle: String = ""
+    @State private var isEditing = false
     @State private var showNoteEditor = false
-    @FocusState private var titleFocused: Bool
+    @FocusState private var isFocused: Bool
 
     private var icon: String {
         switch task.status {
@@ -114,18 +117,19 @@ struct TaskRow: View {
             .buttonStyle(.plain)
 
             VStack(alignment: .leading, spacing: 2) {
-                if isEditingTitle {
-                    TextField("", text: $editTitle)
+                if isEditing {
+                    TextField("", text: $editedTitle)
                         .textFieldStyle(.plain)
-                        .focused($titleFocused)
-                        .onSubmit { saveTitle() }
-                        .onChange(of: titleFocused) { _, focused in
-                            if !focused { saveTitle() }
+                        .focused($isFocused)
+                        .onSubmit { saveAndStopEditing() }
+                        .onChange(of: isFocused) { _, focused in
+                            if !focused { saveAndStopEditing() }
                         }
                 } else {
                     Text(task.title)
                         .strikethrough(task.isDone)
                         .foregroundStyle(task.isDone ? .secondary : .primary)
+                        .onTapGesture { startEditing() }
                 }
 
                 if !task.note.isEmpty {
@@ -136,8 +140,6 @@ struct TaskRow: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
-            .onTapGesture(count: 2) { startEditingTitle() }
 
             if task.isDone, let date = task.completedAt {
                 Text(date, style: .date)
@@ -147,7 +149,7 @@ struct TaskRow: View {
         }
         .padding(.vertical, 4)
         .contextMenu {
-            Button("Edit Title") { startEditingTitle() }
+            Button("Edit") { startEditing() }
             Button(task.note.isEmpty ? "Add Note" : "Edit Note") { showNoteEditor = true }
             Divider()
             if task.status != .completed {
@@ -162,23 +164,36 @@ struct TaskRow: View {
             Divider()
             Button("Delete", role: .destructive) { store.deleteTask(task.id, from: listID) }
         }
+        #if os(iOS)
+        .swipeActions(edge: .trailing) {
+            Button(role: .destructive) { store.deleteTask(task.id, from: listID) } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+        .swipeActions(edge: .leading) {
+            Button { store.setTaskStatus(task.id, in: listID, status: .completed) } label: {
+                Label("Complete", systemImage: "checkmark")
+            }
+            .tint(.green)
+        }
+        #endif
         .popover(isPresented: $showNoteEditor) {
             NoteEditor(task: task, listID: listID)
         }
     }
 
-    private func startEditingTitle() {
-        editTitle = task.title
-        isEditingTitle = true
-        titleFocused = true
+    private func startEditing() {
+        editedTitle = task.title
+        isEditing = true
+        isFocused = true
     }
 
-    private func saveTitle() {
-        let text = editTitle.trimmingCharacters(in: .whitespaces)
+    private func saveAndStopEditing() {
+        let text = editedTitle.trimmingCharacters(in: .whitespaces)
         if !text.isEmpty, text != task.title {
             store.updateTask(task.id, in: listID, title: text, note: task.note)
         }
-        isEditingTitle = false
+        isEditing = false
     }
 }
 

@@ -9,11 +9,22 @@ struct TaskList: Identifiable, Codable {
     var name: String
     var order: Int
     var items: [TaskItem]
+    var deletedAt: Date?
+
+    var isDeleted: Bool { deletedAt != nil }
 
     init(name: String, order: Int = 0) {
         self.name = name
         self.order = order
         items = []
+    }
+
+    mutating func moveToTrash() {
+        deletedAt = Date()
+    }
+
+    mutating func restore() {
+        deletedAt = nil
     }
 }
 
@@ -24,10 +35,13 @@ struct TaskItem: Identifiable, Codable {
     var status: TaskStatus
     var completedAt: Date?
     var order: Int
+    var deletedAt: Date?
+    var originalListID: UUID?
 
     var isCompleted: Bool { status == .completed }
     var isWontDo: Bool { status == .wontDo }
     var isDone: Bool { status != .incomplete }
+    var isDeleted: Bool { deletedAt != nil }
 
     init(title: String, note: String = "", order: Int = 0) {
         self.title = title
@@ -49,5 +63,14 @@ struct TaskItem: Identifiable, Codable {
     mutating func reopen() {
         status = .incomplete
         completedAt = nil
+    }
+
+    mutating func moveToTrash(from listID: UUID) {
+        deletedAt = Date()
+        originalListID = listID
+    }
+
+    mutating func restore() {
+        deletedAt = nil
     }
 }
