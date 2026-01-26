@@ -3,6 +3,7 @@ import SwiftUI
 enum SidebarSelection: Hashable {
     case list(UUID)
     case trash
+    case settings
 }
 
 struct ContentView: View {
@@ -73,6 +74,15 @@ struct SidebarListView: View {
                             }
                         }
                     }
+
+                    NavigationLink(value: SidebarSelection.settings) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "gear")
+                                .foregroundStyle(.secondary)
+                                .frame(width: 20)
+                            Text("Settings")
+                        }
+                    }
                 }
             }
             .onChange(of: scrollTarget) { _, target in
@@ -97,6 +107,9 @@ struct SidebarListView: View {
                 }
             case .trash:
                 TrashView()
+            case .settings:
+                SettingsView()
+                    .navigationTitle("Settings")
             }
         }
         .scrollDismissesKeyboard(.interactively)
@@ -220,6 +233,8 @@ struct MacContentView: View {
                 }
             case .trash:
                 TrashView()
+            case .settings:
+                SettingsView()
             case nil:
                 ContentUnavailableView("Select a List", systemImage: "list.bullet", description: Text("Choose a list from the sidebar"))
             }
@@ -313,13 +328,15 @@ struct TrashView: View {
                 #else
                 .listStyle(.inset)
                 #endif
+                .animation(.smooth(duration: 0.3), value: store.trashedLists.map(\.id))
+                .animation(.smooth(duration: 0.3), value: store.trashedTasks.map(\.id))
             }
         }
         .navigationTitle("Trash")
         .toolbar {
             if store.trashCount > 0 {
                 Button("Empty Trash", role: .destructive) {
-                    store.emptyTrash()
+                    withAnimation { store.emptyTrash() }
                 }
             }
         }
@@ -354,21 +371,21 @@ struct TrashedListRow: View {
         }
         .padding(.vertical, 4)
         .contextMenu {
-            Button("Restore") { store.restoreList(list.id) }
+            Button("Restore") { withAnimation { store.restoreList(list.id) } }
             Divider()
             Button("Delete Permanently", role: .destructive) {
-                store.permanentlyDeleteList(list.id)
+                withAnimation { store.permanentlyDeleteList(list.id) }
             }
         }
         #if os(iOS)
         .swipeActions(edge: .leading) {
-            Button { store.restoreList(list.id) } label: {
+            Button { withAnimation { store.restoreList(list.id) } } label: {
                 Label("Restore", systemImage: "arrow.uturn.backward")
             }
             .tint(.blue)
         }
         .swipeActions(edge: .trailing) {
-            Button(role: .destructive) { store.permanentlyDeleteList(list.id) } label: {
+            Button(role: .destructive) { withAnimation { store.permanentlyDeleteList(list.id) } } label: {
                 Label("Delete", systemImage: "trash.slash")
             }
         }
@@ -380,6 +397,9 @@ struct TrashedTaskRow: View {
     let task: TaskItem
     @EnvironmentObject var store: Store
 
+    private var canRestore: Bool { store.canRestoreTask(task.id) }
+    private var listName: String? { store.listName(for: task.originalListID) }
+
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: "doc.text")
@@ -390,32 +410,45 @@ struct TrashedTaskRow: View {
                 Text(task.title)
                     .strikethrough(task.isDone)
 
-                if let date = task.deletedAt {
-                    Text("Deleted \(date, style: .relative) ago")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                HStack(spacing: 4) {
+                    if let name = listName {
+                        Text(name)
+                        if !canRestore {
+                            Text("(deleted)")
+                        }
+                    }
+                    if let date = task.deletedAt {
+                        if listName != nil { Text("•") }
+                        Text("Deleted \(date, style: .relative) ago")
+                    }
                 }
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
 
             Spacer()
         }
         .padding(.vertical, 4)
         .contextMenu {
-            Button("Restore") { store.restoreTask(task.id) }
-            Divider()
+            if canRestore {
+                Button("Restore") { withAnimation { store.restoreTask(task.id) } }
+                Divider()
+            }
             Button("Delete Permanently", role: .destructive) {
-                store.permanentlyDeleteTask(task.id)
+                withAnimation { store.permanentlyDeleteTask(task.id) }
             }
         }
         #if os(iOS)
         .swipeActions(edge: .leading) {
-            Button { store.restoreTask(task.id) } label: {
-                Label("Restore", systemImage: "arrow.uturn.backward")
+            if canRestore {
+                Button { withAnimation { store.restoreTask(task.id) } } label: {
+                    Label("Restore", systemImage: "arrow.uturn.backward")
+                }
+                .tint(.blue)
             }
-            .tint(.blue)
         }
         .swipeActions(edge: .trailing) {
-            Button(role: .destructive) { store.permanentlyDeleteTask(task.id) } label: {
+            Button(role: .destructive) { withAnimation { store.permanentlyDeleteTask(task.id) } } label: {
                 Label("Delete", systemImage: "trash.slash")
             }
         }

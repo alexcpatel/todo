@@ -1,5 +1,21 @@
 import SwiftUI
 
+struct SoundMenuContent: View {
+    @AppStorage("completionSound") private var selectedSound = CompletionSound.glass.rawValue
+
+    var body: some View {
+        Picker("Completion Sound", selection: $selectedSound) {
+            ForEach(CompletionSound.allCases) { sound in
+                Text(sound.rawValue).tag(sound.rawValue)
+            }
+        }
+        .pickerStyle(.inline)
+        .onChange(of: selectedSound) { _, newValue in
+            CompletionSound(rawValue: newValue)?.play()
+        }
+    }
+}
+
 @main
 struct TodoApp: App {
     @StateObject private var store = Store()
@@ -52,6 +68,10 @@ struct TodoApp: App {
                         }
                     }
                 }
+            }
+
+            CommandMenu("Sound") {
+                SoundMenuContent()
             }
         }
         Settings {

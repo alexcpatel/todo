@@ -245,7 +245,8 @@ final class Store: ObservableObject {
     // MARK: - Lists
 
     func addList(name: String) -> UUID {
-        let list = TaskList(name: name, order: lists.count)
+        let uniqueName = makeUniqueName(name)
+        let list = TaskList(name: uniqueName, order: lists.count)
         lists.append(list)
         save()
         return list.id
@@ -253,8 +254,30 @@ final class Store: ObservableObject {
 
     func renameList(_ id: UUID, to name: String) {
         guard let idx = lists.firstIndex(where: { $0.id == id }) else { return }
-        lists[idx].name = name
+        let uniqueName = makeUniqueName(name, excluding: id)
+        lists[idx].name = uniqueName
         save()
+    }
+
+    private func makeUniqueName(_ name: String, excluding: UUID? = nil) -> String {
+        let existingNames = Set(activeLists.filter { $0.id != excluding }.map(\.name))
+        if !existingNames.contains(name) { return name }
+        var counter = 2
+        while existingNames.contains("\(name) \(counter)") { counter += 1 }
+        return "\(name) \(counter)"
+    }
+
+    func listName(for id: UUID?) -> String? {
+        guard let id else { return nil }
+        if let list = lists.first(where: { $0.id == id }) { return list.name }
+        if let list = trashedLists.first(where: { $0.id == id }) { return list.name }
+        return nil
+    }
+
+    func canRestoreTask(_ taskID: UUID) -> Bool {
+        guard let task = trashedTasks.first(where: { $0.id == taskID }),
+              let originalID = task.originalListID else { return false }
+        return lists.contains { $0.id == originalID }
     }
 
     func deleteList(_ id: UUID) {
@@ -339,19 +362,13 @@ final class Store: ObservableObject {
     // MARK: - Task Trash
 
     func restoreTask(_ taskID: UUID) {
-        guard let idx = trashedTasks.firstIndex(where: { $0.id == taskID }) else { return }
+        guard let idx = trashedTasks.firstIndex(where: { $0.id == taskID }),
+              let listID = trashedTasks[idx].originalListID,
+              let listIdx = lists.firstIndex(where: { $0.id == listID }) else { return }
         var task = trashedTasks.remove(at: idx)
         task.restore()
-
-        // Find original list or first available
-        let targetListID = task.originalListID
-        if let listID = targetListID, let listIdx = lists.firstIndex(where: { $0.id == listID }) {
-            task.order = lists[listIdx].items.count
-            lists[listIdx].items.append(task)
-        } else if !lists.isEmpty {
-            task.order = lists[0].items.count
-            lists[0].items.append(task)
-        }
+        task.order = lists[listIdx].items.count
+        lists[listIdx].items.append(task)
         save()
     }
 

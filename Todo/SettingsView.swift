@@ -4,9 +4,24 @@ struct SettingsView: View {
     @EnvironmentObject var store: Store
     @State private var showingRestoreConfirm = false
     @State private var selectedBackup: Store.BackupInfo?
+    @AppStorage("completionSound") private var selectedSound = CompletionSound.glass.rawValue
 
     var body: some View {
         Form {
+            Section("Sound") {
+                Picker("Completion Sound", selection: $selectedSound) {
+                    ForEach(CompletionSound.allCases) { sound in
+                        Text(sound.rawValue).tag(sound.rawValue)
+                    }
+                }
+                #if os(iOS)
+                .pickerStyle(.navigationLink)
+                #endif
+                .onChange(of: selectedSound) { _, newValue in
+                    CompletionSound(rawValue: newValue)?.play()
+                }
+            }
+
             Section("Sync") {
                 LabeledContent("Status", value: store.syncStatus)
 
@@ -59,8 +74,10 @@ struct SettingsView: View {
                 }
             }
         }
+        #if os(macOS)
         .padding()
         .frame(minWidth: 350, minHeight: 400)
+        #endif
         .alert("Restore Backup?", isPresented: $showingRestoreConfirm) {
             Button("Cancel", role: .cancel) {}
             Button("Restore", role: .destructive) {

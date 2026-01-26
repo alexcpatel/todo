@@ -1,4 +1,54 @@
 import SwiftUI
+#if os(macOS)
+import AppKit
+#else
+import AudioToolbox
+#endif
+
+enum CompletionSound: String, CaseIterable, Identifiable {
+    case none = "None"
+    case glass = "Glass"
+    case pop = "Pop"
+    case purr = "Purr"
+    case hero = "Hero"
+    case ping = "Ping"
+
+    var id: String { rawValue }
+
+    #if os(iOS)
+    var systemSoundID: SystemSoundID {
+        switch self {
+        case .none: return 0
+        case .glass: return 1115
+        case .pop: return 1057
+        case .purr: return 1110
+        case .hero: return 1025
+        case .ping: return 1013
+        }
+    }
+    #endif
+
+    func play() {
+        guard self != .none else { return }
+        #if os(macOS)
+        NSSound(named: rawValue)?.play()
+        #else
+        AudioServicesPlaySystemSound(systemSoundID)
+        #endif
+    }
+}
+
+struct SoundSettings {
+    @AppStorage("completionSound") static var selectedSound: String = CompletionSound.glass.rawValue
+
+    static var current: CompletionSound {
+        CompletionSound(rawValue: selectedSound) ?? .glass
+    }
+}
+
+private func playCompletionSound() {
+    SoundSettings.current.play()
+}
 
 struct TaskListView: View {
     let list: TaskList
@@ -32,6 +82,7 @@ struct TaskListView: View {
                         scrollTarget = id
                     })
                     .id("newTask")
+                    .transaction { $0.animation = nil }
                 } header: {
                     Text("Tasks").font(.subheadline.weight(.medium))
                 }
@@ -70,9 +121,8 @@ struct TaskListView: View {
         #else
         .listStyle(.inset)
         #endif
+        .id(list.id)
         .navigationTitle(list.name)
-        .animation(.smooth(duration: 0.35), value: incompleteTasks.map(\.id))
-        .animation(.smooth(duration: 0.35), value: doneTasks.map(\.id))
     }
 }
 
@@ -85,7 +135,7 @@ struct NewTaskRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: "circle")
+            Image(systemName: "square")
                 .font(.title2)
                 .foregroundStyle(.quaternary)
 
@@ -119,21 +169,23 @@ struct TaskRow: View {
     @EnvironmentObject var store: Store
     @State private var editedTitle: String = ""
     @State private var isEditing = false
-    @State private var showNoteEditor = false
+    @State private var isEditingNote = false
+    @State private var editedNote: String = ""
     @FocusState private var isFocused: Bool
+    @FocusState private var isNoteFocused: Bool
 
     private var icon: String {
         switch task.status {
-        case .incomplete: return "circle"
-        case .completed: return "checkmark.circle.fill"
-        case .wontDo: return "minus.circle.fill"
+        case .incomplete: return "square"
+        case .completed: return "checkmark.square.fill"
+        case .wontDo: return "minus.square.fill"
         }
     }
 
     private var iconColor: Color {
         switch task.status {
         case .incomplete: return .secondary
-        case .completed: return .green
+        case .completed: return .secondary
         case .wontDo: return .gray
         }
     }
@@ -141,9 +193,11 @@ struct TaskRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             Button {
+                let newStatus: TaskStatus = task.isDone ? .incomplete : .completed
                 withAnimation(.smooth(duration: 0.3)) {
-                    store.setTaskStatus(task.id, in: listID, status: task.isDone ? .incomplete : .completed)
+                    store.setTaskStatus(task.id, in: listID, status: newStatus)
                 }
+                if newStatus == .completed { playCompletionSound() }
             } label: {
                 Image(systemName: icon)
                     .font(.title2)
@@ -169,11 +223,23 @@ struct TaskRow: View {
                         .onTapGesture { startEditing() }
                 }
 
-                if !task.note.isEmpty {
-                    Text(task.note)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
+                if !task.note.isEmpty || isEditingNote {
+                    if isEditingNote {
+                        TextField("Add a note...", text: $editedNote, axis: .vertical)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .textFieldStyle(.plain)
+                            .focused($isNoteFocused)
+                            .onSubmit { saveNote() }
+                            .onChange(of: isNoteFocused) { _, focused in
+                                if !focused { saveNote() }
+                            }
+                    } else {
+                        Text(task.note)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .onTapGesture { startEditingNote() }
+                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -187,10 +253,13 @@ struct TaskRow: View {
         .padding(.vertical, 4)
         .contextMenu {
             Button("Edit") { startEditing() }
-            Button(task.note.isEmpty ? "Add Note" : "Edit Note") { showNoteEditor = true }
+            Button(task.note.isEmpty ? "Add Note" : "Edit Note") { startEditingNote() }
             Divider()
             if task.status != .completed {
-                Button("Complete") { store.setTaskStatus(task.id, in: listID, status: .completed) }
+                Button("Complete") {
+                    store.setTaskStatus(task.id, in: listID, status: .completed)
+                    playCompletionSound()
+                }
             }
             if task.status != .wontDo {
                 Button("Won't Do") { store.setTaskStatus(task.id, in: listID, status: .wontDo) }
@@ -208,21 +277,13 @@ struct TaskRow: View {
             }
         }
         .swipeActions(edge: .leading) {
-            Button { store.setTaskStatus(task.id, in: listID, status: .completed) } label: {
+            Button {
+                store.setTaskStatus(task.id, in: listID, status: .completed)
+                playCompletionSound()
+            } label: {
                 Label("Complete", systemImage: "checkmark")
             }
             .tint(.green)
-        }
-        #endif
-        #if os(iOS)
-        .sheet(isPresented: $showNoteEditor) {
-            NoteEditor(task: task, listID: listID)
-                .presentationDetents([.medium])
-                .presentationDragIndicator(.visible)
-        }
-        #else
-        .popover(isPresented: $showNoteEditor) {
-            NoteEditor(task: task, listID: listID)
         }
         #endif
     }
@@ -240,75 +301,18 @@ struct TaskRow: View {
         }
         isEditing = false
     }
-}
 
-struct NoteEditor: View {
-    let task: TaskItem
-    let listID: UUID
-    @EnvironmentObject var store: Store
-    @Environment(\.dismiss) private var dismiss
-    @State private var note: String
-    @FocusState private var focused: Bool
-
-    init(task: TaskItem, listID: UUID) {
-        self.task = task
-        self.listID = listID
-        _note = State(initialValue: task.note)
+    private func startEditingNote() {
+        editedNote = task.note
+        isEditingNote = true
+        isNoteFocused = true
     }
 
-    var body: some View {
-        #if os(iOS)
-        NavigationStack {
-            noteEditorContent
-                .navigationTitle("Note")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        if !task.note.isEmpty {
-                            Button("Clear", role: .destructive) {
-                                store.updateTask(task.id, in: listID, title: task.title, note: "")
-                                dismiss()
-                            }
-                        }
-                    }
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") {
-                            store.updateTask(task.id, in: listID, title: task.title, note: note)
-                            dismiss()
-                        }
-                        .fontWeight(.semibold)
-                    }
-                }
+    private func saveNote() {
+        let text = editedNote.trimmingCharacters(in: .whitespaces)
+        if text != task.note {
+            store.updateTask(task.id, in: listID, title: task.title, note: text)
         }
-        #else
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Note").font(.headline)
-            noteEditorContent
-            HStack {
-                if !task.note.isEmpty {
-                    Button("Clear", role: .destructive) {
-                        store.updateTask(task.id, in: listID, title: task.title, note: "")
-                        dismiss()
-                    }
-                }
-                Spacer()
-                Button("Done") {
-                    store.updateTask(task.id, in: listID, title: task.title, note: note)
-                    dismiss()
-                }
-                .keyboardShortcut(.return)
-            }
-        }
-        .padding()
-        #endif
-    }
-
-    private var noteEditorContent: some View {
-        TextEditor(text: $note)
-            .font(.body)
-            .frame(minWidth: 280, minHeight: 100)
-            .scrollContentBackground(.hidden)
-            .focused($focused)
-            .onAppear { focused = true }
+        isEditingNote = false
     }
 }
