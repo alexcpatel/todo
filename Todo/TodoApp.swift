@@ -1,11 +1,11 @@
 import SwiftUI
 
 struct SoundMenuContent: View {
-    @AppStorage("completionSound") private var selectedSound = CompletionSound.glass.rawValue
+    @AppStorage("completionSound") private var selectedSound = CompletionSound.hero.rawValue
 
     var body: some View {
         Picker("Completion Sound", selection: $selectedSound) {
-            ForEach(CompletionSound.allCases) { sound in
+            ForEach(CompletionSound.availableCases) { sound in
                 Text(sound.rawValue).tag(sound.rawValue)
             }
         }

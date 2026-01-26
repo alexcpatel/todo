@@ -4,13 +4,13 @@ struct SettingsView: View {
     @EnvironmentObject var store: Store
     @State private var showingRestoreConfirm = false
     @State private var selectedBackup: Store.BackupInfo?
-    @AppStorage("completionSound") private var selectedSound = CompletionSound.glass.rawValue
+    @AppStorage("completionSound") private var selectedSound = CompletionSound.hero.rawValue
 
     var body: some View {
         Form {
             Section("Sound") {
                 Picker("Completion Sound", selection: $selectedSound) {
-                    ForEach(CompletionSound.allCases) { sound in
+                    ForEach(CompletionSound.availableCases) { sound in
                         Text(sound.rawValue).tag(sound.rawValue)
                     }
                 }

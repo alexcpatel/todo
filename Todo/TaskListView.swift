@@ -6,24 +6,47 @@ import AudioToolbox
 #endif
 
 enum CompletionSound: String, CaseIterable, Identifiable {
+    // Original macOS sound names
     case none = "None"
     case glass = "Glass"
     case pop = "Pop"
-    case purr = "Purr"
     case hero = "Hero"
     case ping = "Ping"
+    case tink = "Tink"
+    case purr = "Purr"
+    case blow = "Blow"
+    case morse = "Morse"
+    case sosumi = "Sosumi"
+    case funk = "Funk"
+    case submarine = "Submarine"
+    case basso = "Basso"
 
     var id: String { rawValue }
 
+    static var availableCases: [CompletionSound] {
+        #if os(iOS)
+        return allCases.filter { $0 != .submarine }
+        #else
+        return allCases.map { $0 }
+        #endif
+    }
+
     #if os(iOS)
-    var systemSoundID: SystemSoundID {
+    private var systemSoundID: SystemSoundID {
         switch self {
         case .none: return 0
-        case .glass: return 1115
-        case .pop: return 1057
-        case .purr: return 1110
-        case .hero: return 1025
-        case .ping: return 1013
+        case .glass: return 1115        // chime
+        case .pop: return 1123          // pop
+        case .hero: return 1026         // try this ascending tone
+        case .ping: return 1013         // bell
+        case .tink: return 1057         // short tick
+        case .purr: return 1110         // soft
+        case .blow: return 1117         // whoosh
+        case .morse: return 1104        // tap
+        case .sosumi: return 1109       // note
+        case .funk: return 1111         // synth
+        case .submarine: return 1107    // sonar
+        case .basso: return 1052        // low tone
         }
     }
     #endif
@@ -38,14 +61,16 @@ enum CompletionSound: String, CaseIterable, Identifiable {
     }
 }
 
+@MainActor
 struct SoundSettings {
-    @AppStorage("completionSound") static var selectedSound: String = CompletionSound.glass.rawValue
+    @AppStorage("completionSound") static var selectedSound: String = CompletionSound.hero.rawValue
 
     static var current: CompletionSound {
-        CompletionSound(rawValue: selectedSound) ?? .glass
+        CompletionSound(rawValue: selectedSound) ?? .hero
     }
 }
 
+@MainActor
 private func playCompletionSound() {
     SoundSettings.current.play()
 }
