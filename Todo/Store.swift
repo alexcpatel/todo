@@ -7,10 +7,19 @@ final class Store: ObservableObject {
     @Published var trashedLists: [TaskList] = []
     @Published var trashedTasks: [TaskItem] = []
     @Published var syncStatus: String = "Checking..."
+    @Published var backups: [BackupInfo] = []
 
     private let filename = "todo-data.json"
+    private let maxBackups = 20
     private var metadataQuery: NSMetadataQuery?
     private var coordinatorQueue = DispatchQueue(label: "com.todo.filecoordinator")
+    private var lastBackupDate: Date?
+
+    struct BackupInfo: Identifiable {
+        let id: String
+        let date: Date
+        let url: URL
+    }
 
     var activeLists: [TaskList] {
         lists.filter { !$0.isDeleted }.sorted { $0.order < $1.order }
@@ -24,11 +33,24 @@ final class Store: ObservableObject {
         load()
         startMonitoring()
         updateSyncStatus()
+        loadBackupsList()
     }
 
     private var iCloudURL: URL? {
         FileManager.default.url(forUbiquityContainerIdentifier: nil)?
             .appendingPathComponent("Documents")
+    }
+
+    private var backupURL: URL? {
+        if let icloud = iCloudURL {
+            let backupDir = icloud.appendingPathComponent("Backups")
+            try? FileManager.default.createDirectory(at: backupDir, withIntermediateDirectories: true)
+            return backupDir
+        }
+        let local = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Backups")
+        try? FileManager.default.createDirectory(at: local, withIntermediateDirectories: true)
+        return local
     }
 
     private var fileURL: URL? {
@@ -105,6 +127,91 @@ final class Store: ObservableObject {
                 try? data.write(to: writeURL, options: .atomic)
             }
         }
+
+        // Create backup every 5 minutes at most
+        let now = Date()
+        if lastBackupDate == nil || now.timeIntervalSince(lastBackupDate!) > 300 {
+            createBackup(data: data)
+            lastBackupDate = now
+        }
+    }
+
+    // MARK: - Backups
+
+    private func createBackup(data: Data) {
+        guard let backupDir = backupURL else { return }
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withFullDate, .withTime, .withColonSeparatorInTime]
+        let timestamp = formatter.string(from: Date()).replacingOccurrences(of: ":", with: "-")
+        let backupFile = backupDir.appendingPathComponent("backup-\(timestamp).json")
+
+        coordinatorQueue.async { [weak self] in
+            try? data.write(to: backupFile, options: .atomic)
+            Task { @MainActor in
+                self?.cleanupOldBackups()
+                self?.loadBackupsList()
+            }
+        }
+    }
+
+    private func cleanupOldBackups() {
+        guard let backupDir = backupURL else { return }
+        let fm = FileManager.default
+        guard let files = try? fm.contentsOfDirectory(at: backupDir, includingPropertiesForKeys: [.creationDateKey]) else { return }
+
+        let backupFiles = files
+            .filter { $0.pathExtension == "json" }
+            .sorted { url1, url2 in
+                let date1 = (try? url1.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
+                let date2 = (try? url2.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
+                return date1 > date2
+            }
+
+        if backupFiles.count > maxBackups {
+            for file in backupFiles.dropFirst(maxBackups) {
+                try? fm.removeItem(at: file)
+            }
+        }
+    }
+
+    func loadBackupsList() {
+        guard let backupDir = backupURL else { return }
+        let fm = FileManager.default
+        guard let files = try? fm.contentsOfDirectory(at: backupDir, includingPropertiesForKeys: [.creationDateKey]) else {
+            backups = []
+            return
+        }
+
+        backups = files
+            .filter { $0.pathExtension == "json" }
+            .compactMap { url -> BackupInfo? in
+                guard let values = try? url.resourceValues(forKeys: [.creationDateKey]),
+                      let date = values.creationDate else { return nil }
+                return BackupInfo(id: url.lastPathComponent, date: date, url: url)
+            }
+            .sorted { $0.date > $1.date }
+    }
+
+    func restoreBackup(_ backup: BackupInfo) {
+        guard let data = try? Data(contentsOf: backup.url),
+              let decoded = try? JSONDecoder().decode(SaveData.self, from: data) else { return }
+
+        lists = decoded.lists.sorted { $0.order < $1.order }
+        trashedLists = decoded.trashedLists
+        trashedTasks = decoded.trashedTasks
+        save()
+    }
+
+    func deleteBackup(_ backup: BackupInfo) {
+        try? FileManager.default.removeItem(at: backup.url)
+        loadBackupsList()
+    }
+
+    func createManualBackup() {
+        let saveData = SaveData(lists: lists, trashedLists: trashedLists, trashedTasks: trashedTasks)
+        guard let data = try? JSONEncoder().encode(saveData) else { return }
+        createBackup(data: data)
+        lastBackupDate = Date()
     }
 
     private func startMonitoring() {
