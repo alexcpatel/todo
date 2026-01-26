@@ -35,6 +35,7 @@ final class Store: ObservableObject {
         startMonitoring()
         updateSyncStatus()
         loadBackupsList()
+        lastBackupDate = backups.first?.date
     }
 
     private var iCloudURL: URL? {
@@ -45,7 +46,10 @@ final class Store: ObservableObject {
     private var backupURL: URL? {
         if let icloud = iCloudURL {
             let backupDir = icloud.appendingPathComponent("Backups")
-            try? FileManager.default.createDirectory(at: backupDir, withIntermediateDirectories: true)
+            try? FileManager.default.createDirectory(
+                at: backupDir,
+                withIntermediateDirectories: true
+            )
             return backupDir
         }
         let local = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -84,23 +88,24 @@ final class Store: ObservableObject {
             var coordinatorError: NSError?
             let coordinator = NSFileCoordinator()
 
-            coordinator.coordinate(readingItemAt: url, options: [], error: &coordinatorError) { readURL in
-                guard let data = try? Data(contentsOf: readURL) else { return }
+            coordinator
+                .coordinate(readingItemAt: url, options: [], error: &coordinatorError) { readURL in
+                    guard let data = try? Data(contentsOf: readURL) else { return }
 
-                if let decoded = try? JSONDecoder().decode(SaveData.self, from: data) {
-                    result = SaveData(
-                        lists: decoded.lists.sorted { $0.order < $1.order },
-                        trashedLists: decoded.trashedLists,
-                        trashedTasks: decoded.trashedTasks
-                    )
-                } else if let decoded = try? JSONDecoder().decode([TaskList].self, from: data) {
-                    result = SaveData(
-                        lists: decoded.sorted { $0.order < $1.order },
-                        trashedLists: [],
-                        trashedTasks: []
-                    )
+                    if let decoded = try? JSONDecoder().decode(SaveData.self, from: data) {
+                        result = SaveData(
+                            lists: decoded.lists.sorted { $0.order < $1.order },
+                            trashedLists: decoded.trashedLists,
+                            trashedTasks: decoded.trashedTasks
+                        )
+                    } else if let decoded = try? JSONDecoder().decode([TaskList].self, from: data) {
+                        result = SaveData(
+                            lists: decoded.sorted { $0.order < $1.order },
+                            trashedLists: [],
+                            trashedTasks: []
+                        )
+                    }
                 }
-            }
 
             if checkiCloud, !FileManager.default.fileExists(atPath: url.path) {
                 try? FileManager.default.startDownloadingUbiquitousItem(at: url)
@@ -118,13 +123,21 @@ final class Store: ObservableObject {
 
     func save() {
         guard let url = fileURL else { return }
-        let saveData = SaveData(lists: lists, trashedLists: trashedLists, trashedTasks: trashedTasks)
+        let saveData = SaveData(
+            lists: lists,
+            trashedLists: trashedLists,
+            trashedTasks: trashedTasks
+        )
         guard let data = try? JSONEncoder().encode(saveData) else { return }
 
         coordinatorQueue.async {
             var coordinatorError: NSError?
             let coordinator = NSFileCoordinator()
-            coordinator.coordinate(writingItemAt: url, options: .forReplacing, error: &coordinatorError) { writeURL in
+            coordinator.coordinate(
+                writingItemAt: url,
+                options: .forReplacing,
+                error: &coordinatorError
+            ) { writeURL in
                 try? data.write(to: writeURL, options: .atomic)
             }
         }
@@ -158,13 +171,18 @@ final class Store: ObservableObject {
     private func cleanupOldBackups() {
         guard let backupDir = backupURL else { return }
         let fm = FileManager.default
-        guard let files = try? fm.contentsOfDirectory(at: backupDir, includingPropertiesForKeys: [.creationDateKey]) else { return }
+        guard let files = try? fm.contentsOfDirectory(
+            at: backupDir,
+            includingPropertiesForKeys: [.creationDateKey]
+        ) else { return }
 
         let backupFiles = files
             .filter { $0.pathExtension == "json" }
             .sorted { url1, url2 in
-                let date1 = (try? url1.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
-                let date2 = (try? url2.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
+                let date1 = (try? url1.resourceValues(forKeys: [.creationDateKey]).creationDate) ??
+                    .distantPast
+                let date2 = (try? url2.resourceValues(forKeys: [.creationDateKey]).creationDate) ??
+                    .distantPast
                 return date1 > date2
             }
 
@@ -178,7 +196,10 @@ final class Store: ObservableObject {
     func loadBackupsList() {
         guard let backupDir = backupURL else { return }
         let fm = FileManager.default
-        guard let files = try? fm.contentsOfDirectory(at: backupDir, includingPropertiesForKeys: [.creationDateKey]) else {
+        guard let files = try? fm.contentsOfDirectory(
+            at: backupDir,
+            includingPropertiesForKeys: [.creationDateKey]
+        ) else {
             backups = []
             return
         }
@@ -209,7 +230,11 @@ final class Store: ObservableObject {
     }
 
     func createManualBackup() {
-        let saveData = SaveData(lists: lists, trashedLists: trashedLists, trashedTasks: trashedTasks)
+        let saveData = SaveData(
+            lists: lists,
+            trashedLists: trashedLists,
+            trashedTasks: trashedTasks
+        )
         guard let data = try? JSONEncoder().encode(saveData) else { return }
         createBackup(data: data)
         lastBackupDate = Date()
@@ -219,7 +244,11 @@ final class Store: ObservableObject {
         guard iCloudURL != nil else { return }
 
         metadataQuery = NSMetadataQuery()
-        metadataQuery?.predicate = NSPredicate(format: "%K == %@", NSMetadataItemFSNameKey, filename)
+        metadataQuery?.predicate = NSPredicate(
+            format: "%K == %@",
+            NSMetadataItemFSNameKey,
+            filename
+        )
         metadataQuery?.searchScopes = [NSMetadataQueryUbiquitousDocumentsScope]
 
         NotificationCenter.default.addObserver(
@@ -263,7 +292,9 @@ final class Store: ObservableObject {
         let existingNames = Set(activeLists.filter { $0.id != excluding }.map(\.name))
         if !existingNames.contains(name) { return name }
         var counter = 2
-        while existingNames.contains("\(name) \(counter)") { counter += 1 }
+        while existingNames.contains("\(name) \(counter)") {
+            counter += 1
+        }
         return "\(name) \(counter)"
     }
 
@@ -304,7 +335,9 @@ final class Store: ObservableObject {
 
     func moveList(from: IndexSet, to: Int) {
         lists.move(fromOffsets: from, toOffset: to)
-        for i in lists.indices { lists[i].order = i }
+        for i in lists.indices {
+            lists[i].order = i
+        }
         save()
     }
 
@@ -354,7 +387,9 @@ final class Store: ObservableObject {
         guard let listIdx = lists.firstIndex(where: { $0.id == listID }) else { return }
         var subset = lists[listIdx].items.filter { $0.isDone == completed }
         subset.move(fromOffsets: from, toOffset: to)
-        for i in subset.indices { subset[i].order = i }
+        for i in subset.indices {
+            subset[i].order = i
+        }
         lists[listIdx].items = subset + lists[listIdx].items.filter { $0.isDone != completed }
         save()
     }
