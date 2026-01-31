@@ -28,6 +28,8 @@ struct TodoApp: App {
         Window("Todo", id: "main") {
             ContentView(showingImporter: $showingImporter)
                 .environmentObject(store)
+                .frame(minWidth: 600, minHeight: 400)
+                .background(.ultraThinMaterial)
                 .alert("Restore Backup?", isPresented: $showingRestoreAlert) {
                     Button("Cancel", role: .cancel) {}
                     Button("Restore", role: .destructive) {
@@ -41,6 +43,7 @@ struct TodoApp: App {
                     }
                 }
         }
+        .windowStyle(.hiddenTitleBar)
         .commands {
             CommandGroup(replacing: .newItem) {}
             CommandGroup(replacing: .saveItem) {}

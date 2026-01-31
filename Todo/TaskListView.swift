@@ -35,18 +35,18 @@ enum CompletionSound: String, CaseIterable, Identifiable {
     private var systemSoundID: SystemSoundID {
         switch self {
         case .none: return 0
-        case .glass: return 1115        // chime
-        case .pop: return 1123          // pop
-        case .hero: return 1026         // try this ascending tone
-        case .ping: return 1013         // bell
-        case .tink: return 1057         // short tick
-        case .purr: return 1110         // soft
-        case .blow: return 1117         // whoosh
-        case .morse: return 1104        // tap
-        case .sosumi: return 1109       // note
-        case .funk: return 1111         // synth
-        case .submarine: return 1107    // sonar
-        case .basso: return 1052        // low tone
+        case .glass: return 1336        // subtle glass tap
+        case .pop: return 1306          // light pop
+        case .hero: return 1335         // ascending success
+        case .ping: return 1340         // clean ping
+        case .tink: return 1105         // light tink
+        case .purr: return 1311         // soft purr
+        case .blow: return 1320         // airy blow
+        case .morse: return 1312        // short morse
+        case .sosumi: return 1323       // melodic note
+        case .funk: return 1310         // funky tone
+        case .submarine: return 1313    // deep tone
+        case .basso: return 1308        // bass note
         }
     }
     #endif
@@ -145,6 +145,7 @@ struct TaskListView: View {
         .navigationBarTitleDisplayMode(.inline)
         #else
         .listStyle(.inset)
+        .scrollContentBackground(.hidden)
         #endif
         .id(list.id)
         .navigationTitle(list.name)

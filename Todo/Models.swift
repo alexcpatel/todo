@@ -21,6 +21,16 @@ struct TaskList: Identifiable, Codable {
         version = 1
     }
 
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        order = try container.decode(Int.self, forKey: .order)
+        items = try container.decode([TaskItem].self, forKey: .items)
+        deletedAt = try container.decodeIfPresent(Date.self, forKey: .deletedAt)
+        version = try container.decodeIfPresent(Int.self, forKey: .version) ?? 1
+    }
+
     mutating func incrementVersion() {
         version += 1
     }
@@ -58,6 +68,19 @@ struct TaskItem: Identifiable, Codable {
         self.status = .incomplete
         self.order = order
         version = 1
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        note = try container.decode(String.self, forKey: .note)
+        status = try container.decode(TaskStatus.self, forKey: .status)
+        completedAt = try container.decodeIfPresent(Date.self, forKey: .completedAt)
+        order = try container.decode(Int.self, forKey: .order)
+        deletedAt = try container.decodeIfPresent(Date.self, forKey: .deletedAt)
+        originalListID = try container.decodeIfPresent(UUID.self, forKey: .originalListID)
+        version = try container.decodeIfPresent(Int.self, forKey: .version) ?? 1
     }
 
     mutating func incrementVersion() {

@@ -217,6 +217,7 @@ struct MacContentView: View {
                     .tag(SidebarSelection.trash)
                 }
             }
+            .scrollContentBackground(.hidden)
             .navigationTitle("Lists")
             .onChange(of: isEditing) { _, focused in
                 if !focused, let id = editingID {
@@ -239,6 +240,7 @@ struct MacContentView: View {
                 ContentUnavailableView("Select a List", systemImage: "list.bullet", description: Text("Choose a list from the sidebar"))
             }
         }
+        .navigationSplitViewStyle(.balanced)
     }
 
     @ViewBuilder
