@@ -35,20 +35,27 @@ Data is stored as a single JSON file (`todo-data.json`) in iCloud Drive's ubiqui
 
 ### Consistency Model
 
-The sync follows **eventual consistency** with **last-writer-wins (LWW)** conflict resolution—a pragmatic tradeoff described in *Designing Data-Intensive Applications* (Kleppmann, Ch. 5).
+The sync follows **eventual consistency** with **version-based merge** conflict resolution.
 
 | Aspect | Approach |
 |--------|----------|
-| Replication | Single-leader (file as source of truth) |
-| Conflict resolution | Last-writer-wins (iCloud handles) |
+| Replication | Multi-leader (each device writes independently) |
+| Conflict resolution | Version counters (higher version wins, merge at item level) |
 | Consistency | Eventual (seconds to minutes lag) |
 | Durability | Local + iCloud redundancy + auto-backups |
 
-**Tradeoffs**: LWW can lose concurrent edits. For a personal todo app with single-user-per-device usage, this is acceptable. A multi-user collaborative app would need CRDTs or operational transformation.
+**How merging works:**
+
+- Each list and task has a version counter, incremented on every modification
+- When syncing, items are merged by ID: higher version wins
+- New items from either side are preserved (add-wins semantics)
+- Concurrent edits to different items never conflict
+
+**Tradeoffs**: Concurrent edits to the *same* item will resolve to the higher version. For a personal todo app this is acceptable—conflicts are rare and hourly backups provide recovery.
 
 ### Backup Strategy
 
-Automatic timestamped backups are created hourly, stored in `Backups/` within the same iCloud container. Old backups are pruned to keep the last 30 (~30 days of coverage). 
+Automatic timestamped backups are created hourly, stored in `Backups/` within the same iCloud container. Old backups are pruned to keep the last 30 (~30 days of coverage).
 
 **Restore:** File → Restore from Backup → select a date/time
 

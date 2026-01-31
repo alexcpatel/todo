@@ -82,9 +82,14 @@ final class Store: ObservableObject {
     func load() {
         guard let url = fileURL else { return }
         let checkiCloud = isUsingiCloud
+        let localData = SaveData(
+            lists: lists,
+            trashedLists: trashedLists,
+            trashedTasks: trashedTasks
+        )
 
         Task.detached {
-            var result: SaveData?
+            var remoteData: SaveData?
             var coordinatorError: NSError?
             let coordinator = NSFileCoordinator()
 
@@ -93,17 +98,9 @@ final class Store: ObservableObject {
                     guard let data = try? Data(contentsOf: readURL) else { return }
 
                     if let decoded = try? JSONDecoder().decode(SaveData.self, from: data) {
-                        result = SaveData(
-                            lists: decoded.lists.sorted { $0.order < $1.order },
-                            trashedLists: decoded.trashedLists,
-                            trashedTasks: decoded.trashedTasks
-                        )
+                        remoteData = decoded
                     } else if let decoded = try? JSONDecoder().decode([TaskList].self, from: data) {
-                        result = SaveData(
-                            lists: decoded.sorted { $0.order < $1.order },
-                            trashedLists: [],
-                            trashedTasks: []
-                        )
+                        remoteData = SaveData(lists: decoded, trashedLists: [], trashedTasks: [])
                     }
                 }
 
@@ -111,14 +108,90 @@ final class Store: ObservableObject {
                 try? FileManager.default.startDownloadingUbiquitousItem(at: url)
             }
 
-            if let result {
-                await MainActor.run { [result] in
-                    self.lists = result.lists
-                    self.trashedLists = result.trashedLists
-                    self.trashedTasks = result.trashedTasks
+            if let remoteData {
+                let merged = Self.merge(local: localData, remote: remoteData)
+                await MainActor.run {
+                    self.lists = merged.lists.sorted { $0.order < $1.order }
+                    self.trashedLists = merged.trashedLists
+                    self.trashedTasks = merged.trashedTasks
                 }
             }
         }
+    }
+
+    // MARK: - Conflict Resolution
+
+    /// Merges local and remote data using version counters (higher version wins)
+    private nonisolated static func merge(local: SaveData, remote: SaveData) -> SaveData {
+        SaveData(
+            lists: mergeLists(local: local.lists, remote: remote.lists),
+            trashedLists: mergeLists(local: local.trashedLists, remote: remote.trashedLists),
+            trashedTasks: mergeTasks(local: local.trashedTasks, remote: remote.trashedTasks)
+        )
+    }
+
+    private nonisolated static func mergeLists(
+        local: [TaskList],
+        remote: [TaskList]
+    ) -> [TaskList] {
+        var result: [UUID: TaskList] = [:]
+
+        // Add all remote lists
+        for list in remote {
+            result[list.id] = list
+        }
+
+        // Merge local lists (higher version wins, always merge items)
+        for var localList in local {
+            if var remoteList = result[localList.id] {
+                // Always merge items from both sides
+                let mergedItems = mergeTasks(local: localList.items, remote: remoteList.items)
+
+                // Higher version wins for list-level properties
+                if localList.version > remoteList.version {
+                    localList.items = mergedItems
+                    // Take max version to preserve causality
+                    localList.version = max(localList.version, remoteList.version)
+                    result[localList.id] = localList
+                } else {
+                    remoteList.items = mergedItems
+                    remoteList.version = max(localList.version, remoteList.version)
+                    result[localList.id] = remoteList
+                }
+            } else {
+                // New local list not in remote
+                result[localList.id] = localList
+            }
+        }
+
+        return Array(result.values)
+    }
+
+    private nonisolated static func mergeTasks(
+        local: [TaskItem],
+        remote: [TaskItem]
+    ) -> [TaskItem] {
+        var result: [UUID: TaskItem] = [:]
+
+        // Add all remote tasks
+        for task in remote {
+            result[task.id] = task
+        }
+
+        // Merge local tasks (higher version wins)
+        for localTask in local {
+            if let remoteTask = result[localTask.id] {
+                if localTask.version > remoteTask.version {
+                    result[localTask.id] = localTask
+                }
+                // Equal or lower version: keep remote (consistent tiebreaker)
+            } else {
+                // New local task not in remote
+                result[localTask.id] = localTask
+            }
+        }
+
+        return Array(result.values).sorted { $0.order < $1.order }
     }
 
     func save() {
@@ -285,6 +358,7 @@ final class Store: ObservableObject {
         guard let idx = lists.firstIndex(where: { $0.id == id }) else { return }
         let uniqueName = makeUniqueName(name, excluding: id)
         lists[idx].name = uniqueName
+        lists[idx].incrementVersion()
         save()
     }
 
@@ -337,6 +411,7 @@ final class Store: ObservableObject {
         lists.move(fromOffsets: from, toOffset: to)
         for i in lists.indices {
             lists[i].order = i
+            lists[i].incrementVersion()
         }
         save()
     }
@@ -348,6 +423,7 @@ final class Store: ObservableObject {
         guard let idx = lists.firstIndex(where: { $0.id == listID }) else { return nil }
         let task = TaskItem(title: title, note: note, order: lists[idx].items.count)
         lists[idx].items.append(task)
+        lists[idx].incrementVersion()
         save()
         return task.id
     }
@@ -358,6 +434,7 @@ final class Store: ObservableObject {
         else { return }
         lists[listIdx].items[taskIdx].title = title
         lists[listIdx].items[taskIdx].note = note
+        lists[listIdx].items[taskIdx].incrementVersion()
         save()
     }
 
@@ -389,6 +466,7 @@ final class Store: ObservableObject {
         subset.move(fromOffsets: from, toOffset: to)
         for i in subset.indices {
             subset[i].order = i
+            subset[i].incrementVersion()
         }
         lists[listIdx].items = subset + lists[listIdx].items.filter { $0.isDone != completed }
         save()
