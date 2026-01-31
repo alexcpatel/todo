@@ -18,7 +18,7 @@ A native macOS/iOS todo app with iCloud sync.
 
 ### Architecture
 
-```
+```bash
 ┌─────────────┐     ┌─────────────────┐     ┌─────────────┐
 │   iPhone    │────▶│   iCloud Drive  │◀────│     Mac     │
 │   (Store)   │◀────│  (JSON file)    │────▶│   (Store)   │
@@ -38,7 +38,7 @@ Data is stored as a single JSON file (`todo-data.json`) in iCloud Drive's ubiqui
 The sync follows **eventual consistency** with **version-based merge** conflict resolution.
 
 | Aspect | Approach |
-|--------|----------|
+| -------- | ---------- |
 | Replication | Multi-leader (each device writes independently) |
 | Conflict resolution | Version counters (higher version wins, merge at item level) |
 | Consistency | Eventual (seconds to minutes lag) |

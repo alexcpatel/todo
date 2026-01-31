@@ -12,55 +12,196 @@ struct ContentView: View {
 
     var body: some View {
         #if os(iOS)
-        NavigationStack {
-            SidebarListView()
-        }
+            NavigationStack {
+                SidebarListView()
+            }
         #else
-        MacContentView()
-            .sheet(isPresented: $showingImporter) { ImportView() }
+            MacContentView()
+                .sheet(isPresented: $showingImporter) { ImportView() }
         #endif
     }
 }
 
 #if os(iOS)
-struct SidebarListView: View {
-    @EnvironmentObject var store: Store
-    @State private var editingID: UUID?
-    @State private var editName = ""
-    @State private var scrollTarget: UUID?
-    @FocusState private var isEditing: Bool
+    struct SidebarListView: View {
+        @EnvironmentObject var store: Store
+        @State private var editingID: UUID?
+        @State private var editName = ""
+        @State private var scrollTarget: UUID?
+        @FocusState private var isEditing: Bool
 
-    var body: some View {
-        ScrollViewReader { proxy in
-            List {
-                Section {
-                    ForEach(store.activeLists) { list in
-                        NavigationLink(value: SidebarSelection.list(list.id)) {
-                            listRowContent(for: list)
+        var body: some View {
+            ScrollViewReader { proxy in
+                List {
+                    Section {
+                        ForEach(store.activeLists) { list in
+                            NavigationLink(value: SidebarSelection.list(list.id)) {
+                                listRowContent(for: list)
+                            }
+                            .id(list.id)
+                            .contextMenu {
+                                Button("Rename") { startRename(list) }
+                                Divider()
+                                Button("Delete", role: .destructive) { store.deleteList(list.id) }
+                            }
+                            .swipeActions(edge: .trailing) {
+                                Button(role: .destructive) { store.deleteList(list.id) } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                            }
                         }
-                        .id(list.id)
-                        .contextMenu {
-                            Button("Rename") { startRename(list) }
-                            Divider()
-                            Button("Delete", role: .destructive) { store.deleteList(list.id) }
+                        .onMove { store.moveList(from: $0, to: $1) }
+
+                        Button { addNewList() } label: {
+                            Label("New List", systemImage: "plus")
                         }
-                        .swipeActions(edge: .trailing) {
-                            Button(role: .destructive) { store.deleteList(list.id) } label: {
-                                Label("Delete", systemImage: "trash")
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                    }
+
+                    Section {
+                        NavigationLink(value: SidebarSelection.trash) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "trash")
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 20)
+                                Text("Trash")
+                                Spacer()
+                                if store.trashCount > 0 {
+                                    Text("\(store.trashCount)")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+
+                        NavigationLink(value: SidebarSelection.settings) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "gear")
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 20)
+                                Text("Settings")
                             }
                         }
                     }
-                    .onMove { store.moveList(from: $0, to: $1) }
-
-                    Button { addNewList() } label: {
-                        Label("New List", systemImage: "plus")
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
                 }
+                .onChange(of: scrollTarget) { _, target in
+                    if let target {
+                        withAnimation {
+                            proxy.scrollTo(target, anchor: .center)
+                        }
+                        scrollTarget = nil
+                    }
+                }
+            }
+            .listStyle(.plain)
+            .listSectionSpacing(.compact)
+            .contentMargins(.top, 0, for: .scrollContent)
+            .navigationTitle("Lists")
+            .navigationBarTitleDisplayMode(.inline)
+            .navigationDestination(for: SidebarSelection.self) { selection in
+                switch selection {
+                case let .list(id):
+                    if let list = store.lists.first(where: { $0.id == id }) {
+                        TaskListView(list: list)
+                    }
+                case .trash:
+                    TrashView()
+                case .settings:
+                    SettingsView()
+                        .navigationTitle("Settings")
+                }
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button { addNewList() } label: {
+                        Image(systemName: "plus")
+                    }
+                }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { isEditing = false }
+                }
+            }
+            .onChange(of: isEditing) { _, focused in
+                if !focused, let id = editingID {
+                    finishRename(id)
+                }
+            }
+        }
 
-                Section {
-                    NavigationLink(value: SidebarSelection.trash) {
+        @ViewBuilder
+        private func listRowContent(for list: TaskList) -> some View {
+            HStack(spacing: 6) {
+                Image(systemName: "list.bullet")
+                    .foregroundStyle(.secondary)
+                    .frame(width: 20)
+
+                if editingID == list.id {
+                    TextField("", text: $editName)
+                        .textFieldStyle(.plain)
+                        .focused($isEditing)
+                        .submitLabel(.done)
+                        .onSubmit { finishRename(list.id) }
+                } else {
+                    Text(list.name)
+                        .foregroundStyle(.primary)
+                }
+            }
+        }
+
+        private func addNewList() {
+            let id = store.addList(name: "New List")
+            scrollTarget = id
+            if let list = store.lists.first(where: { $0.id == id }) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    startRename(list)
+                }
+            }
+        }
+
+        private func startRename(_ list: TaskList) {
+            editName = list.name
+            editingID = list.id
+            isEditing = true
+        }
+
+        private func finishRename(_ id: UUID) {
+            let name = editName.trimmingCharacters(in: .whitespaces)
+            if !name.isEmpty {
+                store.renameList(id, to: name)
+            }
+            editingID = nil
+        }
+    }
+#endif
+
+#if os(macOS)
+    struct MacContentView: View {
+        @EnvironmentObject var store: Store
+        @State private var selection: SidebarSelection?
+        @State private var editingID: UUID?
+        @State private var editName = ""
+        @FocusState private var isEditing: Bool
+
+        var body: some View {
+            NavigationSplitView {
+                List(selection: $selection) {
+                    Section {
+                        ForEach(store.activeLists) { list in
+                            listRow(for: list)
+                        }
+                        .onMove { store.moveList(from: $0, to: $1) }
+
+                        Button { addNewList() } label: {
+                            Label("New List", systemImage: "plus")
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                    }
+
+                    Section {
                         HStack(spacing: 6) {
                             Image(systemName: "trash")
                                 .foregroundStyle(.secondary)
@@ -73,231 +214,98 @@ struct SidebarListView: View {
                                     .foregroundStyle(.secondary)
                             }
                         }
-                    }
-
-                    NavigationLink(value: SidebarSelection.settings) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "gear")
-                                .foregroundStyle(.secondary)
-                                .frame(width: 20)
-                            Text("Settings")
-                        }
+                        .tag(SidebarSelection.trash)
                     }
                 }
-            }
-            .onChange(of: scrollTarget) { _, target in
-                if let target {
-                    withAnimation {
-                        proxy.scrollTo(target, anchor: .center)
+                .scrollContentBackground(.hidden)
+                .navigationTitle("Lists")
+                .onChange(of: isEditing) { _, focused in
+                    if !focused, let id = editingID {
+                        finishRename(id)
                     }
-                    scrollTarget = nil
+                }
+            } detail: {
+                switch selection {
+                case let .list(id):
+                    if let list = store.lists.first(where: { $0.id == id }) {
+                        TaskListView(list: list)
+                    } else {
+                        ContentUnavailableView(
+                            "Select a List",
+                            systemImage: "list.bullet",
+                            description: Text("Choose a list from the sidebar")
+                        )
+                    }
+                case .trash:
+                    TrashView()
+                case .settings:
+                    SettingsView()
+                case nil:
+                    ContentUnavailableView(
+                        "Select a List",
+                        systemImage: "list.bullet",
+                        description: Text("Choose a list from the sidebar")
+                    )
                 }
             }
+            .navigationSplitViewStyle(.balanced)
         }
-        .listStyle(.plain)
-        .listSectionSpacing(.compact)
-        .contentMargins(.top, 0, for: .scrollContent)
-        .navigationTitle("Lists")
-        .navigationBarTitleDisplayMode(.inline)
-        .navigationDestination(for: SidebarSelection.self) { selection in
-            switch selection {
-            case .list(let id):
-                if let list = store.lists.first(where: { $0.id == id }) {
-                    TaskListView(list: list)
-                }
-            case .trash:
-                TrashView()
-            case .settings:
-                SettingsView()
-                    .navigationTitle("Settings")
-            }
-        }
-        .scrollDismissesKeyboard(.interactively)
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button { addNewList() } label: {
-                    Image(systemName: "plus")
-                }
-            }
-            ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
-                Button("Done") { isEditing = false }
-            }
-        }
-        .onChange(of: isEditing) { _, focused in
-            if !focused, let id = editingID {
-                finishRename(id)
-            }
-        }
-    }
 
-    @ViewBuilder
-    private func listRowContent(for list: TaskList) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: "list.bullet")
-                .foregroundStyle(.secondary)
-                .frame(width: 20)
-
-            if editingID == list.id {
-                TextField("", text: $editName)
-                    .textFieldStyle(.plain)
-                    .focused($isEditing)
-                    .submitLabel(.done)
-                    .onSubmit { finishRename(list.id) }
-            } else {
-                Text(list.name)
-                    .foregroundStyle(.primary)
-            }
-        }
-    }
-
-    private func addNewList() {
-        let id = store.addList(name: "New List")
-        scrollTarget = id
-        if let list = store.lists.first(where: { $0.id == id }) {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                startRename(list)
-            }
-        }
-    }
-
-    private func startRename(_ list: TaskList) {
-        editName = list.name
-        editingID = list.id
-        isEditing = true
-    }
-
-    private func finishRename(_ id: UUID) {
-        let name = editName.trimmingCharacters(in: .whitespaces)
-        if !name.isEmpty {
-            store.renameList(id, to: name)
-        }
-        editingID = nil
-    }
-}
-#endif
-
-#if os(macOS)
-struct MacContentView: View {
-    @EnvironmentObject var store: Store
-    @State private var selection: SidebarSelection?
-    @State private var editingID: UUID?
-    @State private var editName = ""
-    @FocusState private var isEditing: Bool
-
-    var body: some View {
-        NavigationSplitView {
-            List(selection: $selection) {
-                Section {
-                    ForEach(store.activeLists) { list in
-                        listRow(for: list)
-                    }
-                    .onMove { store.moveList(from: $0, to: $1) }
-
-                    Button { addNewList() } label: {
-                        Label("New List", systemImage: "plus")
-                    }
-                    .buttonStyle(.plain)
+        @ViewBuilder
+        private func listRow(for list: TaskList) -> some View {
+            HStack(spacing: 6) {
+                Image(systemName: "list.bullet")
                     .foregroundStyle(.secondary)
-                }
+                    .frame(width: 20)
 
-                Section {
-                    HStack(spacing: 6) {
-                        Image(systemName: "trash")
-                            .foregroundStyle(.secondary)
-                            .frame(width: 20)
-                        Text("Trash")
-                        Spacer()
-                        if store.trashCount > 0 {
-                            Text("\(store.trashCount)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .tag(SidebarSelection.trash)
-                }
-            }
-            .scrollContentBackground(.hidden)
-            .navigationTitle("Lists")
-            .onChange(of: isEditing) { _, focused in
-                if !focused, let id = editingID {
-                    finishRename(id)
-                }
-            }
-        } detail: {
-            switch selection {
-            case .list(let id):
-                if let list = store.lists.first(where: { $0.id == id }) {
-                    TaskListView(list: list)
+                if editingID == list.id {
+                    TextField("", text: $editName)
+                        .textFieldStyle(.plain)
+                        .focused($isEditing)
+                        .onSubmit { finishRename(list.id) }
                 } else {
-                    ContentUnavailableView("Select a List", systemImage: "list.bullet", description: Text("Choose a list from the sidebar"))
+                    Text(list.name)
                 }
-            case .trash:
-                TrashView()
-            case .settings:
-                SettingsView()
-            case nil:
-                ContentUnavailableView("Select a List", systemImage: "list.bullet", description: Text("Choose a list from the sidebar"))
+            }
+            .tag(SidebarSelection.list(list.id))
+            .contextMenu {
+                Button("Rename") { startRename(list) }
+                Divider()
+                Button("Delete", role: .destructive) { deleteList(list) }
             }
         }
-        .navigationSplitViewStyle(.balanced)
-    }
 
-    @ViewBuilder
-    private func listRow(for list: TaskList) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: "list.bullet")
-                .foregroundStyle(.secondary)
-                .frame(width: 20)
-
-            if editingID == list.id {
-                TextField("", text: $editName)
-                    .textFieldStyle(.plain)
-                    .focused($isEditing)
-                    .onSubmit { finishRename(list.id) }
-            } else {
-                Text(list.name)
+        private func addNewList() {
+            let id = store.addList(name: "New List")
+            selection = .list(id)
+            if let list = store.lists.first(where: { $0.id == id }) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    startRename(list)
+                }
             }
         }
-        .tag(SidebarSelection.list(list.id))
-        .contextMenu {
-            Button("Rename") { startRename(list) }
-            Divider()
-            Button("Delete", role: .destructive) { deleteList(list) }
-        }
-    }
 
-    private func addNewList() {
-        let id = store.addList(name: "New List")
-        selection = .list(id)
-        if let list = store.lists.first(where: { $0.id == id }) {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                startRename(list)
+        private func startRename(_ list: TaskList) {
+            editName = list.name
+            editingID = list.id
+            isEditing = true
+        }
+
+        private func finishRename(_ id: UUID) {
+            let name = editName.trimmingCharacters(in: .whitespaces)
+            if !name.isEmpty {
+                store.renameList(id, to: name)
             }
+            editingID = nil
+        }
+
+        private func deleteList(_ list: TaskList) {
+            if selection == .list(list.id) {
+                selection = nil
+            }
+            store.deleteList(list.id)
         }
     }
-
-    private func startRename(_ list: TaskList) {
-        editName = list.name
-        editingID = list.id
-        isEditing = true
-    }
-
-    private func finishRename(_ id: UUID) {
-        let name = editName.trimmingCharacters(in: .whitespaces)
-        if !name.isEmpty {
-            store.renameList(id, to: name)
-        }
-        editingID = nil
-    }
-
-    private func deleteList(_ list: TaskList) {
-        if selection == .list(list.id) {
-            selection = nil
-        }
-        store.deleteList(list.id)
-    }
-}
 #endif
 
 struct TrashView: View {
@@ -305,8 +313,12 @@ struct TrashView: View {
 
     var body: some View {
         Group {
-            if store.trashedLists.isEmpty && store.trashedTasks.isEmpty {
-                ContentUnavailableView("Trash is Empty", systemImage: "trash", description: Text("Deleted items will appear here"))
+            if store.trashedLists.isEmpty, store.trashedTasks.isEmpty {
+                ContentUnavailableView(
+                    "Trash is Empty",
+                    systemImage: "trash",
+                    description: Text("Deleted items will appear here")
+                )
             } else {
                 List {
                     if !store.trashedLists.isEmpty {
@@ -387,7 +399,8 @@ struct TrashedListRow: View {
             .tint(.blue)
         }
         .swipeActions(edge: .trailing) {
-            Button(role: .destructive) { withAnimation { store.permanentlyDeleteList(list.id) } } label: {
+            Button(role: .destructive) { withAnimation { store.permanentlyDeleteList(list.id) }
+            } label: {
                 Label("Delete", systemImage: "trash.slash")
             }
         }
@@ -450,7 +463,8 @@ struct TrashedTaskRow: View {
             }
         }
         .swipeActions(edge: .trailing) {
-            Button(role: .destructive) { withAnimation { store.permanentlyDeleteTask(task.id) } } label: {
+            Button(role: .destructive) { withAnimation { store.permanentlyDeleteTask(task.id) }
+            } label: {
                 Label("Delete", systemImage: "trash.slash")
             }
         }

@@ -65,7 +65,7 @@ struct TaskItem: Identifiable, Codable {
     init(title: String, note: String = "", order: Int = 0) {
         self.title = title
         self.note = note
-        self.status = .incomplete
+        status = .incomplete
         self.order = order
         version = 1
     }

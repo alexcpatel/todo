@@ -1,8 +1,8 @@
 import SwiftUI
 #if os(macOS)
-import AppKit
+    import AppKit
 #else
-import AudioToolbox
+    import AudioToolbox
 #endif
 
 enum CompletionSound: String, CaseIterable, Identifiable {
@@ -25,38 +25,38 @@ enum CompletionSound: String, CaseIterable, Identifiable {
 
     static var availableCases: [CompletionSound] {
         #if os(iOS)
-        return allCases.filter { $0 != .submarine }
+            return allCases.filter { $0 != .submarine }
         #else
-        return allCases.map { $0 }
+            return allCases.map { $0 }
         #endif
     }
 
     #if os(iOS)
-    private var systemSoundID: SystemSoundID {
-        switch self {
-        case .none: return 0
-        case .glass: return 1336        // subtle glass tap
-        case .pop: return 1306          // light pop
-        case .hero: return 1335         // ascending success
-        case .ping: return 1340         // clean ping
-        case .tink: return 1105         // light tink
-        case .purr: return 1311         // soft purr
-        case .blow: return 1320         // airy blow
-        case .morse: return 1312        // short morse
-        case .sosumi: return 1323       // melodic note
-        case .funk: return 1310         // funky tone
-        case .submarine: return 1313    // deep tone
-        case .basso: return 1308        // bass note
+        private var systemSoundID: SystemSoundID {
+            switch self {
+            case .none: 0
+            case .glass: 1256 // notification
+            case .pop: 1257 // alert pop
+            case .hero: 1258 // complete
+            case .ping: 1259 // bright ping
+            case .tink: 1260 // soft tink
+            case .purr: 1261 // gentle
+            case .blow: 1262 // airy
+            case .morse: 1263 // beep
+            case .sosumi: 1264 // melodic
+            case .funk: 1265 // rhythmic
+            case .submarine: 1266 // deep
+            case .basso: 1255 // bass
+            }
         }
-    }
     #endif
 
     func play() {
         guard self != .none else { return }
         #if os(macOS)
-        NSSound(named: rawValue)?.play()
+            NSSound(named: rawValue)?.play()
         #else
-        AudioServicesPlaySystemSound(systemSoundID)
+            AudioServicesPlaySystemSound(systemSoundID)
         #endif
     }
 }
@@ -100,7 +100,9 @@ struct TaskListView: View {
                     }
                     .onMove { store.moveTasks(in: list.id, completed: false, from: $0, to: $1) }
                     .onDelete { indices in
-                        for i in indices { store.deleteTask(incompleteTasks[i].id, from: list.id) }
+                        for i in indices {
+                            store.deleteTask(incompleteTasks[i].id, from: list.id)
+                        }
                     }
 
                     NewTaskRow(listID: list.id, onAdd: { id in
@@ -120,7 +122,9 @@ struct TaskListView: View {
                         }
                         .onMove { store.moveTasks(in: list.id, completed: true, from: $0, to: $1) }
                         .onDelete { indices in
-                            for i in indices { store.deleteTask(doneTasks[i].id, from: list.id) }
+                            for i in indices {
+                                store.deleteTask(doneTasks[i].id, from: list.id)
+                            }
                         }
                     } header: {
                         Text("Done").font(.subheadline.weight(.medium))
@@ -154,7 +158,7 @@ struct TaskListView: View {
 
 struct NewTaskRow: View {
     let listID: UUID
-    var onAdd: ((UUID) -> Void)? = nil
+    var onAdd: ((UUID) -> Void)?
     @EnvironmentObject var store: Store
     @State private var title = ""
     @FocusState private var isFocused: Bool
@@ -179,12 +183,12 @@ struct NewTaskRow: View {
         }
         .padding(.vertical, 4)
         #if os(iOS)
-        .toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
-                Button("Done") { isFocused = false }
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { isFocused = false }
+                }
             }
-        }
         #endif
     }
 }
@@ -202,17 +206,17 @@ struct TaskRow: View {
 
     private var icon: String {
         switch task.status {
-        case .incomplete: return "square"
-        case .completed: return "checkmark.square.fill"
-        case .wontDo: return "minus.square.fill"
+        case .incomplete: "square"
+        case .completed: "checkmark.square.fill"
+        case .wontDo: "minus.square.fill"
         }
     }
 
     private var iconColor: Color {
         switch task.status {
-        case .incomplete: return .secondary
-        case .completed: return .secondary
-        case .wontDo: return .gray
+        case .incomplete: .secondary
+        case .completed: .secondary
+        case .wontDo: .gray
         }
     }
 

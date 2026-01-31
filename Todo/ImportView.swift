@@ -11,9 +11,11 @@ struct ImportView: View {
         VStack(spacing: 20) {
             Text("Import from TickTick").font(.title2.bold())
 
-            Text("1. Go to ticktick.com\n2. Settings → Account → Generate Backup\n3. Download the CSV file")
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
+            Text(
+                "1. Go to ticktick.com\n2. Settings → Account → Generate Backup\n3. Download the CSV file"
+            )
+            .multilineTextAlignment(.center)
+            .foregroundStyle(.secondary)
 
             Button("Select CSV File") { importing = true }
                 .buttonStyle(.borderedProminent)
@@ -25,7 +27,10 @@ struct ImportView: View {
             Button("Cancel") { dismiss() }.buttonStyle(.bordered)
         }
         .padding(40)
-        .fileImporter(isPresented: $importing, allowedContentTypes: [.commaSeparatedText]) { result in
+        .fileImporter(
+            isPresented: $importing,
+            allowedContentTypes: [.commaSeparatedText]
+        ) { result in
             switch result {
             case let .success(url): importCSV(from: url)
             case let .failure(err): error = err.localizedDescription
@@ -67,7 +72,11 @@ struct ImportView: View {
                     listCache[listName] = listIdx
                 }
 
-                var task = TaskItem(title: title, note: note, order: store.lists[listIdx].items.count)
+                var task = TaskItem(
+                    title: title,
+                    note: note,
+                    order: store.lists[listIdx].items.count
+                )
                 // Status: 0=Normal, 1=Completed, 2=Archived, -1=Won't Do
                 switch statusStr {
                 case "1", "2":

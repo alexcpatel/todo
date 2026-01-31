@@ -86,7 +86,9 @@ struct SettingsView: View {
                 }
             }
         } message: {
-            Text("This will replace all current data with the backup from \(selectedBackup?.date ?? Date(), style: .date) at \(selectedBackup?.date ?? Date(), style: .time).")
+            Text(
+                "This will replace all current data with the backup from \(selectedBackup?.date ?? Date(), style: .date) at \(selectedBackup?.date ?? Date(), style: .time)."
+            )
         }
         .onAppear {
             store.loadBackupsList()
