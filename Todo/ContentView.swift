@@ -12,12 +12,12 @@ struct ContentView: View {
 
     var body: some View {
         #if os(iOS)
-        NavigationStack {
-            SidebarListView()
-        }
+            NavigationStack {
+                SidebarListView()
+            }
         #else
-        MacContentView()
-            .sheet(isPresented: $showingImporter) { ImportView() }
+            MacContentView()
+                .sheet(isPresented: $showingImporter) { ImportView() }
         #endif
     }
 }
@@ -349,7 +349,7 @@ struct TrashView: View {
         .navigationTitle("Trash")
         .toolbar {
             if store.trashCount > 0 {
-                Button("Empty Trash", role: .destructive) {
+                Button("Empty Trash", systemImage: "trash.slash", role: .destructive) {
                     withAnimation { store.emptyTrash() }
                 }
             }
