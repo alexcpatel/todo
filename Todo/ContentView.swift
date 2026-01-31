@@ -12,12 +12,12 @@ struct ContentView: View {
 
     var body: some View {
         #if os(iOS)
-            NavigationStack {
-                SidebarListView()
-            }
+        NavigationStack {
+            SidebarListView()
+        }
         #else
-            MacContentView()
-                .sheet(isPresented: $showingImporter) { ImportView() }
+        MacContentView()
+            .sheet(isPresented: $showingImporter) { ImportView() }
         #endif
     }
 }
@@ -217,7 +217,7 @@ struct ContentView: View {
                         .tag(SidebarSelection.trash)
                     }
                 }
-                .scrollContentBackground(.hidden)
+                .listStyle(.sidebar)
                 .navigationTitle("Lists")
                 .onChange(of: isEditing) { _, focused in
                     if !focused, let id = editingID {

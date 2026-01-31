@@ -113,6 +113,7 @@ struct TaskListView: View {
                 } header: {
                     Text("Tasks").font(.subheadline.weight(.medium))
                 }
+                .listSectionSeparator(.hidden)
 
                 if !doneTasks.isEmpty {
                     Section {
@@ -129,6 +130,7 @@ struct TaskListView: View {
                     } header: {
                         Text("Done").font(.subheadline.weight(.medium))
                     }
+                    .listSectionSeparator(.hidden)
                 }
             }
             .onChange(of: scrollTarget) { _, target in
@@ -149,7 +151,6 @@ struct TaskListView: View {
         .navigationBarTitleDisplayMode(.inline)
         #else
         .listStyle(.inset)
-        .scrollContentBackground(.hidden)
         #endif
         .id(list.id)
         .navigationTitle(list.name)
